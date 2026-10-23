@@ -80,9 +80,9 @@
     },
     "install": {
       "preferred": "tarball",
-      "tarball": "https://github.com/YuJunZhiXue/dsh-purge/archive/refs/heads/master.tar.gz",
-      "zip": "https://github.com/YuJunZhiXue/dsh-purge/archive/refs/heads/master.zip",
-      "git": "https://github.com/YuJunZhiXue/dsh-purge.git"
+      "tarball": "https://github.com/wyybs/dsh-purge/archive/refs/heads/local.tar.gz",
+      "zip": "https://github.com/wyybs/dsh-purge/archive/refs/heads/local.zip",
+      "git": "https://github.com/wyybs/dsh-purge.git"
     }
   },
   "publishConfig": {
