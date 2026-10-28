@@ -24,6 +24,7 @@
     "bin",
     "docs",
     "presets",
+    "skills",
     "scripts",
     "client.js",
     "cordis.patch.yml",
@@ -37,6 +38,7 @@
     "embed-prompt": "node scripts/embed-default-prompt.mjs",
     "build:client": "node scripts/build-client.mjs",
     "postinstall": "node scripts/ensure-profile-bundle.mjs",
+    "install:skill": "node scripts/install-paper-autopilot.mjs",
     "test": "node --test"
   },
   "license": "Apache-2.0",
