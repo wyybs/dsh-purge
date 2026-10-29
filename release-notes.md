@@ -1,3 +1,27 @@
+# 1.1.82（仅移植 #180，`local` 定制版）
+
+## 中文
+
+- **#180**：`pnpm-workspace.yaml` 的 `allowBuilds` 不再被反复写坏。
+  - URL 键解析按「冒号+空白」定位分隔符，`dsh-purge@https://…` / `dsh-purge@file:D:/…` 不再被第一个冒号截断。
+  - 写回时含 `:` 的键统一加引号，round-trip 无损。
+  - 期望键优先取 `pnpm-lock.yaml` 里实际解析到的 tarball URL；其余一切 `dsh-purge@*` 历史键（畸形截断键、过期版本/commit URL）在下次 `ensure` 时自动清掉。
+  - 非 purge 的重复键只留第一份（避免 pnpm 报 `duplicated mapping key`）；注释行原样保留。
+  - 写盘前做最小 YAML 校验（顶层键/段内键不重复、每行可无损回解），校验不过就不写，健康文件零写入。
+  - 新增 13 条单测（`test/profile-insert.test.js`）。
+
+## 本地偏离（**不跟上游的部分**）
+
+- `readPurgeTarball()` 的兜底地址**保留 `wyybs/dsh-purge` 的 `local.tar.gz`**，不采用上游写死的 `codeload.github.com/YuJunZhiXue/…/master`。
+- `purgePnpmBuildSpecs()` **保留 profile `dependencies` 里的 `file:` spec**（本机安装形态 `file:D:/…/src` 必需），上游 1.1.82 已删掉这条来源。
+- 上游 1.1.82 线的其余改动（`skills/` 全清空、`RANGE_HOSTS` 32→0、`permittedHost(){return false}`、`files[]` 去 `skills`）属**能力收窄/功能删除，按用户规则一律不跟**。
+
+## English
+
+- **#180** ported only. Allow-builds rewrite is now colon-safe, self-healing and zero-write on healthy files.
+- Local deviations kept: `wyybs/dsh-purge` tarball fallback, `file:` spec resolution from profile `package.json`.
+- Upstream's stripped line (no `skills/`, empty `RANGE_HOSTS`, `permittedHost(){return false}`) is intentionally **not** followed.
+
 # 1.1.81
 
 ## 中文
