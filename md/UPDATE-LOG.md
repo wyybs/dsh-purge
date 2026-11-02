@@ -8,6 +8,13 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-02 13:52 文档收尾：加「逐文件差异原因速查」附录 G
+
+- 新增附录 G：把 `local` vs 上游的 21 个非资产文件逐条写清「差什么 / 为什么 / 下次怎么处理」，
+  并点名**高发冲突三件套** `lib/core.js`、`lib/net-scope.js`、`package.json` —— 以后 cherry-pick 撞了直接照表解，禁止 `-X theirs`。
+- `UPDATE-GUIDE.md` §9 加了指向附录 F（待办）与附录 G（冲突原因）的两行指针。
+- 提交前全量自检：语法 0 失败、相对 import 断链 0、`import.meta.url` 断链 0、`node --test` 85/85、文档无冲突标记且不含本机路径。
+
 ### 2026-11-02 13:47 补 2 处漏移植 + 立「附录 F 待办清单」
 
 - 复查 `git diff --numstat local upstream-mirror` 时发现两处上游修复没搬（不在 1.1.87/1.1.88 的 diff 里，是更早提交的边角）：
@@ -305,3 +312,30 @@
 > **不在此表里、但已确认不用跟的**：`skills/`、`test/`、`README*.md`、`default-prompt-inject`（外挂条款）、
 > `net-scope.js`（放行名单）、`install-paper-autopilot.mjs`、`package.json` 的 version/`files[]`/`dsh.install`。
 > 理由见附录 B。
+
+---
+
+## 附录 G：逐文件差异原因速查（下次 `cherry-pick` 撞冲突时先看这张表）
+
+> 口径：`git diff --name-only local upstream-mirror` 里**除 `skills/`、`test/`、`md/` 之外**的 21 个文件。
+> 这 21 个就是「上游改了、我们没跟（或故意不一样）」的全部原因；表里没有的文件，说明两边一致，直接跟即可。
+
+| 文件 | 两边差什么 | 原因 | 下次怎么处理 |
+|---|---|---|---|
+| `lib/core.js` | 上游 1.1.88 版 vs 我们 +2 处 fork 修正 | ① `rollupPatchStatus` 保留「已写入优先于 drifted」（上游 1.1.83 起 drifted 压过 applied，多文件补丁常年假告警）；② #32 那条第 rc.5 替换加了 `insertProbe`（上游缺，每 apply 多挂一条注释） | **必冲突**。cherry-pick 后手工保留这两处；`test/patch-status.test.js` 会立刻抓出来 |
+| `lib/net-scope.js` | 上游 `RANGE_HOSTS` 0 + `permittedHost(){return false}`；我们 32 条 + 真放行 | 能力收窄，跟了公网靶场只剩 localhost | **必冲突**，整文件取我方（`git checkout --ours`） |
+| `lib/profile-insert.js` | 上游 #185「只写裸包名」；我们裸名 + 带引号 `file:` 键 | pnpm 11.28.5 对 `file:` 依赖按完整 spec 记账，只写裸名会 `ERR_PNPM_IGNORED_BUILDS` 且 postinstall 被跳过（自愈就在 postinstall 里 → 死锁） | **必冲突**，保留 `purgePnpmBuildSpecs` + `formatAllowBuildLine` 的改动 |
+| `lib/default-prompt-inject.zh.md` / `.en.md` | 上游把「外挂/注入」条款改成「禁止。不实现」；我们保留「本地测试·完整实现」 | 提示词层收窄，跟了等于自废放行 | 取我方 |
+| `package.json` | version 1.1.73（上游 1.1.88）、`files[]` 含 `skills`、保留 `install:skill`、`dsh.install` 指 wyybs、已含 `dshTargets` | version 是插件的状态键（永不跟随）；`files[]` 少了 skills 会静默丢 88 个技能文件；安装源改了会破坏 `file:` 钉住 | **必冲突**。只保留上游新增的字段（如 `dshTargets`），其余取我方 |
+| `scripts/install-paper-autopilot.mjs` | 上游删除（整体清 skills）；我们保留 | 与 `skills/paper-autopilot` 配套 | 别跟删除 |
+| `lib/redteam/validate.js` | 已跟 realpath 修复，仅 3 段报错文案保留英文 | 文案 | 冲突时取我方文案 + 上游代码 |
+| `lib/redteam/store-core.js` | 上游 +306/−318；我们停在 1.1.73 | **POC 知识库后端在本文件里**（`searchPocs`/`pocStats`/`getPoc`/`markPocUsed`），上游 1.1.82 起把它下架成空壳 | 见附录 F #1：**禁止整文件覆盖**，逐 hunk 合 |
+| `lib/redteam/tools.js` | 上游 +19/−15；我们停在 1.1.73 | 同上，`poc_*` 8 个工具实现在这 | 见附录 F #2 |
+| `lib/redteam/skill-fixes.js` | 上游 +230/−218；我们停在 1.1.80 前 | 未移植（P2） | 见附录 F #3 |
+| `lib/redteam/skill-availability.js` | +13/−13 | 未移植（P2） | 见附录 F #4 |
+| `lib/redteam/schema.js` | +15/−15 | 未移植（P2） | 见附录 F #5 |
+| `lib/redteam/platform-config.js` | +16/−16 | 未移植（P2，1.1.87 起该文件改用 `atomic-write.js`，那个已跟） | 见附录 F #6 |
+| `client.js` / `lib/redteam/client.js` / `lib/redteam/ui.js` / `lib/redteam/score-rules.js` | 上游 1.1.84 起**面板中文化重排**；我们保留英文 | 纯文案，按「纯文案不跟」原则 | **别跟**，除非要切中文界面（P3） |
+| `README.md` / `README.zh-CN.md` / `README.ja.md` | 上游改安装说明、新增日文版 | 纯文档，零运行影响 | 想同步就单独抄文案，不动代码 |
+
+**高发冲突三件套**：`lib/core.js`、`lib/net-scope.js`、`package.json` —— 每次 port 都会撞，撞了按上表处理，不要 `-X theirs`。
