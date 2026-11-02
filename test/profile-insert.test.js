@@ -362,7 +362,7 @@ test("`[]` 替换后幂等：再 ensure 一次零写入", () => {
    上游 #185 只按裸包名写 allowBuilds，覆盖 tarball / git / registry 三种形态，
    没覆盖本机实际用的 `link:E:/work/ai_base/dsh-purge/src`。这里锁住本机不变量：
    profile 依赖写的是 link: 时，自愈后仍只剩裸包名，历史遗留的 @link: / @https: 键全部清掉。 */
-test("link: 安装形态：自愈后只剩裸包名，@link: 与 @https: 旧键被清", () => {
+test("link: 安装形态：保留裸包名 + 带引号的 link: 键，@https: 旧键被清", () => {
   const dir = withTempProfile();
   fs.writeFileSync(
     path.join(dir, "package.json"),
@@ -370,7 +370,7 @@ test("link: 安装形态：自愈后只剩裸包名，@link: 与 @https: 旧键�
     "utf8",
   );
   const fp = path.join(dir, "pnpm-workspace.yaml");
-  const polluted = "allowBuilds:/n"
+  const polluted = "allowBuilds:\n"
     + "  dsh-purge: true\n"
     + '  "dsh-purge@link:E:/work/ai_base/dsh-purge/src": true\n'
     + '  "dsh-purge@https://github.com/wyybs/dsh-purge/archive/refs/heads/local.tar.gz": true\n';
@@ -381,7 +381,9 @@ test("link: 安装形态：自愈后只剩裸包名，@link: 与 @https: 旧键�
   assert.equal(result.wrote, true);
 
   const after = fs.readFileSync(fp, "utf8");
-  assert.equal(after.includes("dsh-purge@link:"), false);
+  // pnpm 11.28.5 对 link:/file: 按完整 spec 记账，只写裸名会被判 ignoredBuilds
+  assert.equal(after.includes('"dsh-purge@link:E:/work/ai_base/dsh-purge/src": true'), true);
+  // 远端 URL 键仍要清掉（#185：pnpm 11 会拿它当版本联合解析直接崩）
   assert.equal(after.includes("dsh-purge@https://"), false);
   assert.equal(after.includes("  dsh-purge: true"), true);
 
