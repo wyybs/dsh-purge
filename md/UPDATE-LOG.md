@@ -8,6 +8,17 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-02 13:47 补 2 处漏移植 + 立「附录 F 待办清单」
+
+- 复查 `git diff --numstat local upstream-mirror` 时发现两处上游修复没搬（不在 1.1.87/1.1.88 的 diff 里，是更早提交的边角）：
+  - `lib/web.js` +10：**#197 重启提示语**（「服务在后台跑，关窗口不会停」）——少这句用户会立刻再开一个 → `EADDRINUSE`；
+  - `scripts/ensure-profile-bundle.mjs` +3：**#191** 当 `cordis.patch.yml` 内容不认识时打印提示而不是写坏。
+  - 提交 `1ed1662`，85/85 通过，副本重装后 DIFF=0。
+- 现状盘点（这是判断「还剩什么」的唯一口径）：`git diff --name-only local upstream-mirror` = **121** 文件
+  = 88 `skills/` + 9 `test/` + 3 `md/`（我方资产）+ 7 有意保留 + 3 README + 1 `validate.js`（只留英文文案）+ **9 个欠账**。
+- 新增 **附录 F「待办清单」**：把 9 个欠账（红队 `store-core`/`tools`/`skill-fixes`/`skill-availability`/`schema`/`platform-config`、面板文案四件、rc.5 实测、`.ignored` 残留）
+  连同「为什么不跟 / 动手前提 / 优先级」列成表；`UPDATE-GUIDE.md` §9 加了指针，防止下次重复提案。
+
 ### 2026-11-02 13:35 文档脱敏并纳入 git（`6e60e01`）
 
 - `src\md\` 三份文档正式进仓库（`local` 分支），换机器 clone 即得。
@@ -271,3 +282,26 @@
 差异不会越积越多（每次是覆盖，不是叠加），但**含义会变糊**。结论：判断「要不要更新」只用
 `git diff --stat local upstream-mirror`；判断「我们的定制有哪些」只用 `git log --grep='^local:' local`。
 `master → local` 的数字不作任何决策依据。
+
+---
+
+## 附录 F：待办清单（未移植 / 待验证，2026-11-02 立）
+
+> 判据：`git diff --name-only local upstream-mirror` 共 **121** 文件 = 88 `skills/` + 9 `test/` + 3 `md/`（我方资产，永不跟）
+> + 7 有意保留 + 3 README + 1 `validate.js`（只留英文文案）+ **下面这 9 个欠账**。
+
+| # | 待办 | 现状 | 为什么不跟/没做 | 动手前提 | 优先级 |
+|---|---|---|---|---|---|
+| 1 | `lib/redteam/store-core.js`（+306/−318） | 停在 1.1.73 | 上游 1.1.82 起把 POC 知识库整体下架成空壳；本机 `searchPocs`/`pocStats`/`getPoc`/`markPocUsed` 全在里面，**整文件覆盖 = 知识库报废**，必须逐 hunk 合并 | 宿主开着（要回归红队面板） | P1：真正收益是 `listEngagements` 统计入参 + `evidenceLimit`，大证据不再拖慢面板 |
+| 2 | `lib/redteam/tools.js`（+19/−15） | 停在 1.1.73 | 同上，`poc_*` 8 个工具的实现在这 | 与 #1 同一轮 | P1：`listVulns` 传 `evidenceLimit`、`listEngagements({stats:true})` |
+| 3 | `lib/redteam/skill-fixes.js`（+230/−218） | 停在 1.1.80 前 | 上游技能修复逻辑演进，本机未跟 | 需确认不影响现有技能加载 | P2 |
+| 4 | `lib/redteam/skill-availability.js`（+13/−13） | 同上 | 同上 | 同上 | P2 |
+| 5 | `lib/redteam/schema.js`（+15/−15） | 同上 | 同上 | 同上 | P2 |
+| 6 | `lib/redteam/platform-config.js`（+16/−16） | 停在 1.1.82 | 1.1.87 起改用 `atomic-write.js`（该文件已跟），本文件未跟 | 低风险，可先单独跟 | P2 |
+| 7 | 面板文案四件：`client.js`、`lib/redteam/client.js`、`lib/redteam/ui.js`、`score-rules.js` | 停在 1.1.80–1.1.82 | **纯中文化重排**（英文 → 中文），按「纯文案不跟」原则 | —— | P3：**永远不碰**，除非要切中文界面 |
+| 8 | `rc.5` 适配实测 | `dshTargets` 已声明 rc.2+rc.5，6 条补丁双 pattern | 上游 README 仍写「rc.3 及更新不支持」，与 release-notes 自相矛盾；本机仍是 rc.2，**没有实测** | 拿到 rc.5 安装包 → 解 `resources\app` 副本 → 离线跑 85 条，`drifted` 必须 0 | 用户 2026-11-02 明确「先不用管」 |
+| 9 | `node_modules\.ignored\` 新残留 | 每轮重装会堆一份 `dsh-purge.old-*`（约 5 MB） | 属 pnpm 行为，非故障 | 定期清理即可 | P3 |
+
+> **不在此表里、但已确认不用跟的**：`skills/`、`test/`、`README*.md`、`default-prompt-inject`（外挂条款）、
+> `net-scope.js`（放行名单）、`install-paper-autopilot.mjs`、`package.json` 的 version/`files[]`/`dsh.install`。
+> 理由见附录 B。

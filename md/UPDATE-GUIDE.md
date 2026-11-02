@@ -1286,4 +1286,6 @@ git -C $src checkout -B local v1.1.73-wyybs
 
 历史内容全部在 **[`UPDATE-LOG.md`](./UPDATE-LOG.md)**：变更日志（port / local 全表）、上游 1.1.80 / 1.1.81 逐文件评估、已判定「不跟」的上游提交清单、事故复盘（`file:` 不感知变化、`files[]` 吞 skills、`ERR_PNPM_IGNORED_BUILDS`、`spawn EPERM`、rc.3 清空补丁层）、每次巡检的实测数值。
 
+> **先看 `UPDATE-LOG.md` 附录 F「待办清单」** —— 还没移植的 9 个文件（红队 `store-core` / `tools` 等）与 rc.5 实测都在那张表里，附「为什么不跟 / 动手前提 / 优先级」。动手前先翻一遍，别重复提案。
+
 > 本文件只写**下次还要执行的动作与规范**。任何「某天发生了什么、为什么改」的内容一律追加到 log，不进这里（判据见 §0.1）。
