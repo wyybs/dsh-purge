@@ -8,6 +8,36 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-06 13:43 增量 port 到上游 1.1.92（只收扩宽）：78/86 applied、0 pending、0 drifted
+
+- 上游 `d1eff01`(1.1.88) → `fc6e787`(**1.1.92**)，且 force-push 改写历史（`git merge-base` 不通）。
+  镜像按 §1.1 重建：备份 tag `upstream-mirror-backup-20261106`(=d1eff01)、快照 `upstream-snapshot-20261106-fc6e787`，均已 push。
+- 真实增量 12 条（`2ef4d14`=1.1.88 与我们已 port 的 `d1eff01` 内容等价）。**没走 §4.2 整树重建**：
+  重建会丢 88 `skills/`、32 条 `RANGE_HOSTS`、`test/` 与 8 条 `local:` 定制，故走增量 4 条 `port:` + 2 条 `local:` 修正。
+- **收的（扩宽）**：`#92/#93` 退出留痕（#91 一拆二，补丁总数 85→86）· DOM 级原子写保 `+x`（#213）· pnpm 12 来源键保留（#209）·
+  **靶场门禁放宽**：删「只认本机/私网解析」(isRangeTarget+lookupIps)、删 `CHEAT_*` 外挂硬拦，
+  改为只拦大陆/港澳（后缀）+ 银行金融 + 政府军事，其余公网放行，IP 字面量直接放行。
+- **剥的（收窄，不跟）**：上游 `net-scope.js` 整块删掉 `RANGE_HOSTS`(32) 与 `permittedHost/readAllowExact`，
+  并把 `writeAllowText()` 改成不落盘空壳（面板「保存名单」静默失败）→ 本机整块恢复，且白名单**优先于**
+  区域/政府/银行判定（否则 `xctf.org.cn`/`ciscn.cn`/`ctf.show` 这些 .cn 靶场会被区域规则连带拦掉）。
+- **挡的（地址）**：`95bc62f`/`a89f986` 把仓库全量迁 `HunYiSage`（install 三处 + REPO + welcome.repo）→ 整体不跟；
+  `git grep` 复查全仓 0 处 `HunYiSage`，`dsh.install` 仍指 `wyybs/.../local`。
+- **跟不了（面板）**：`ff4431e`(1.1.90) 与 `2d428b1` 的 `client.js` 改的是上游自己的 rewind 宿主实现，
+  本机 `client.js` 是分叉实现（1862 行差异），硬搬会破坏面板 → 只把 `own.hint` 文案同步成新门禁口径（`local:` 提交）。
+- **上游回归，本机补掉（`local:`）**：`#92`/`#93` 的 pattern 在 replace 里原样保留 → 二次 apply 会重复插日志
+  （每次 +4 / +24 行），与历史「+841 字符」事故同形态。补 `insertProbe` 后 `test/patch-status.test.js` 转绿。
+  `isSourcePurgeAllowBuildKey` 上游把 `://` 一律当来源键、「pnpm 版本判断不出」时保留 →
+  本机 pnpm 11.28.5 会 `ERR_PNPM_INVALID_VERSION_UNION` 崩 install。收紧为只认 `file:/link:/portal:`。
+- **数值**：`node --test` **85/85 通过** · 副本 SHA 与源码逐文件 **DIFF=0**（MISSING=17，全是打包白名单外的 `md/`+`test/`+点文件）·
+  `skills` 仍 **88** · §5.1 stub 自检 **OK tools=64** · CLI `--apply` 两次幂等 ·
+  `--status` = **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86）**、`drifted=0` ·
+  `app.asar=False`、无 `errors.log`、宿主 `0.2.1-rc.2`。
+- **状态处理**：补丁集变了（#91 → #92/#93）但 version 不动（禁区 3），故删 `applied.json`/`settle-restart.guard`
+  让其重新推导，`installed-rev` 由 apply 重写为 `apply:1.1.73`。
+- **回滚**：`git checkout -B local rc2-freeze-20261106`（或 `pre-update-20261106-133222`）→ 删副本 → `pnpm install` → 重启。
+  定制补丁已导出 `$WS\backup\local-20261106-133222.patch`（8 条 `local:`）。
+- **没做**：不重启宿主（等用户托盘退出再开）；`local` 未 push（禁区 5）。
+
 ### 2026-11-02 13:52 文档收尾：加「逐文件差异原因速查」附录 G
 
 - 新增附录 G：把 `local` vs 上游的 21 个非资产文件逐条写清「差什么 / 为什么 / 下次怎么处理」，

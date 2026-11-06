@@ -107,11 +107,11 @@
 | 版本号 | `src/package.json` 保持 `1.1.73`（**永不改 version 字段**）；上游已到 **1.1.88** | ✓ 源码与副本都是 1.1.73 |
 | tag | `v1.1.73`、`v1.1.73-wyybs`、`v1.1.73-wyybs-port1`（=6667999）、`-port2`（=5f7bbc2）、`v1.1.81-wyybs-port3`（=efcc00c）、`v1.1.81-wyybs-port3.1`（=0f7ba6c）、`v1.1.82-wyybs-port4`（=c7ab58e ← **当前 HEAD**）、`pre-port-20261027`、`pre-rc3-rescue-20261027`、`upstream-mirror-backup-20261029`、5 个 `upstream-snapshot-*` | ✓ 全部已 push |
 | **`app.asar`** | **必须是 False**（已改名为 `app.asar.bak`） | ✓ `False`；`app.asar.bak` = True（182,794,869 B）；`resources\app` = True（18367 文件 / 416.3 MB） |
-| **补丁状态** | **77 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 85 条）**；`drifted = 0`、无 `errors.log`、`*.dshpurge.bak` 58 | ✓ `applied.json` = `2026-11-02T03:28:45Z`；二次 `--apply` 零写入（幂等）；`#80` skipped、`#71 missing_file` 均属预期 |
+| **补丁状态** | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86 条）**；`drifted = 0`、无 `errors.log` | ✓ `applied.json` = `2026-11-06T05:43:33Z`；二次 `--apply` 零写入（幂等）；`#80` skipped、`#71 missing_file` 均属预期 |
 | **宿主** | **0.2.1-rc.2**（rc.3 起不来 → 用户手动降级）；`app-update.yml` 已改名 `.disabled` 掐断 nightly | ✓ `FileVersion` = 0.2.1-rc.2；GUI 端口每次重启都换（当前 49880） |
 | **本会话 shell** | `pwsh` 可用（§0 顶部：EPERM 是杀软导致，已解决） | ✓ 全部命令可跑 |
 | **DSH 支持矩阵** | 上游 `dshTarget` 仍 `0.2.1-rc.2`；1.1.88 起 `dshTargets` 声明接受 **rc.2 + rc.5**，但 **README 仍写 rc.3 及更新不支持**（声明自相矛盾） | ✓ `dshTarget`=`0.2.1-rc.2`；rc.5 属「上游自称支持、README 未改口」，**需本机离线实测后才写进文档** |
-| **能不能升 DSH** | **rc.2 不动；rc.5 未经实测不升** | ✗ 见 §0.5 —— 升 rc.5 前先按 §1.2 的离线比对法，在 rc.5 的 `resources\app` 副本上跑一遍 85 条，drifted 必须为 0 |
+| **能不能升 DSH** | **rc.2 不动；rc.5 未经实测不升** | ✗ 见 §0.5 —— 升 rc.5 前先按 §1.2 的离线比对法，在 rc.5 的 `resources\app` 副本上跑一遍 86 条，drifted 必须为 0 |
 
 > **「补丁层」和「插件本体」是两个独立的东西，别混**（2026-10-29 14:25 两层全部 ✓）：
 >
@@ -190,9 +190,9 @@ Test-Path '<DSH_ROOT>\resources\app.asar'
 | **`0.2.1-rc.5`** | **⚠ 上游声称支持（`dshTargets` + 6 条双 pattern），README 未改口** | release-notes 1.1.88：`#32/#36/#50/#53/#57/#62 在 rc.2 与 rc.5 上都能命中`；`web + desktop 双宿主 73/85 applied、0 pending、0 drifted` |
 | **`0.2.1-rc.3` / `rc.4`** | **❌ 不支持** | `DSH 0.2.1-rc.3 and newer RCs are not supported. Stay on 0.2.1-rc.2.` |
 
-> **rc.5 的口径**：上游代码层已适配（85 条里 6 条双 pattern，其余 79 条在 rc.5 上应「不命中但不漂移」），
+> **rc.5 的口径**：上游代码层已适配（86 条里 6 条双 pattern，其余 80 条在 rc.5 上应「不命中但不漂移」），
 > 但 README 的 not-supported 没改、我们也没在真机验过 ⇒ **只当「待验证」**。
-> 升 rc.5 前必须先在 rc.5 的 `resources\app` **副本**上跑一遍 85 条，`drifted` 必须为 0。
+> 升 rc.5 前必须先在 rc.5 的 `resources\app` **副本**上跑一遍 86 条，`drifted` 必须为 0。
 
 上游 README 原文（`README.md` L60 / L136-139，`README.zh-CN.md` 同款）：
 > **1.1.81** targets **DSH 0.2.1-rc.2** (0.2.0 still works). **DSH 0.2.1-rc.3 and newer RCs are not supported.**
@@ -259,7 +259,7 @@ git -C $src show upstream/master:release-notes.md |
 | ⑤ | 用户 | 装新版 DSH 安装包 / 打开自动更新让它升 | `FileVersion` 变成 A.B.C |
 | ⑥ | 用户 | 打开宿主 → 应用内 `/purge apply`（或 GUI 面板 Apply）重新解包 | `unpacked_asar:true` |
 | ⑦ | 用户 | **完全退出宿主 + 退出 WorkBuddy** → 手动把 `app.asar` 改名成 `app.asar.bak` → 重开（§4.6.1 四步） | `app.asar` = False |
-| ⑧ | 助手 | `/purge status` 复查：applied 数是否回到满值（当前 61/66，新宿主可能变） | 无 `✗ app.asar: 还在`、无 `errors.log` 新增 |
+| ⑧ | 助手 | `/purge status` 复查：applied 数是否回到满值（当前 78/86，新宿主可能变） | 无 `✗ app.asar: 还在`、无 `errors.log` 新增 |
 
 > **④ 那句话必须说清楚「现在可以升了」+「升完还要做 ⑤⑥⑦」。** 只丢一句「上游更新了」
 > 会让用户以为插件已经能用而直接升，那就又回到空窗期。
@@ -573,7 +573,7 @@ foreach($pair in @(@('upstream',$up), @('fork',$fk))){
 | `RANGE_HOSTS` 条目数 | **32** | 上面 §1.5 ② 的脚本 |
 | `permittedHost()` | 不得被改成 `return false` | 读 `lib/net-scope.js` |
 | 公网靶场 / 长任务 | 不得被无条件拦截 | 读 `lib/redteam/**` 里的门禁分支 |
-| 审批放行 / 提示词注入 / 隐藏控制台 | 必须仍在 applied 里（当前 61/66） | `/purge status` 对照 |
+| 审批放行 / 提示词注入 / 隐藏控制台 | 必须仍在 applied 里（当前 78/86） | `/purge status` 对照 |
 | 新增「默认关闭 / 需显式开启」开关 | 一律按收窄处理 | diff 里找 `enabled: false`、`?? false`、`optIn` |
 | 写死地址 | 不得出现 `YuJunZhiXue`（上游原文引用除外） | `git grep -n 'YuJunZhiXue' -- lib client.js` |
 
@@ -1134,7 +1134,7 @@ try { & $node $tmp 2>$null | Select-Object -First 1 } finally { Pop-Location }
 然后在**应用内**跑 `/purge status`，确认：
 
 - 不出现 `✗ app.asar: 还在`（`asar_still_sealed:false`）
-- `补丁 / patches` = **77 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 85）**，`drifted` 必须为 **0**
+- `补丁 / patches` = **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86）**，`drifted` 必须为 **0**
 - `patches_lost:false`、`ready:true`
 - `#80 MINIMAL_OFFICIAL_TOOLSET` skipped（本机无 minimal 预设）、`#71 LIANGSHEN_IDENTITY_LINE` missing_file（缺「梁神」预设包）—— 两个都属预期
 - `errors.log` 没有新增（当前不存在）
