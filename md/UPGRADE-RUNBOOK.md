@@ -17,12 +17,14 @@
 
 另外两条默认假设：
 
-- **只追加、不替换**。适配新宿主时，旧 `pattern` 一个字都不改，只在 `replacements` 里追加新变体、在 `targetFiles` 里追加新路径。这样老版本宿主的命中集合只增不减，回滚零成本。
+- **只追加、不替换**。适配新宿主时，旧 `pattern` 一个字都不改，只在 `replacements` 里追加新变体、在 `targetFiles` 里追加新路径。这样老版本宿主的命中集合只增不减，回滚零成本。**§5 判据 4 有机器检查，别靠自觉。**
 - **改完必须给数字**。"应该能跑"不算结论，要给出 `applied / drifted / missing_file` 的实测值。
 
 ---
 
 ## 1. 第 0 步：确认基线
+
+### 1.1 看现在是什么状态
 
 ```bash
 cd <仓库>/src
@@ -46,6 +48,28 @@ PY
 ```
 
 或者解包后直接读 `<app>/resources/app/dsh/package.json` 的 `version`（最准）。
+
+### 1.2 开分支（先开分支，再动手改）
+
+```bash
+git status --short                     # 必须为空；有未提交的东西先提交或 stash
+git checkout -b feat/dsh-<新版本> local
+```
+
+**必须从 `local` 拉**，不要从上一个 `feat/` 拉 —— 否则会把上次的适配混进来，回滚时说不清哪条是谁的。
+
+这条 `checkout -b` 是安全的：新分支和 `local` 指向同一个 commit，工作树内容不变，git 不重写任何文件，**硬链接不受影响**。危险只发生在切换到"内容不同"的分支时。
+
+提交粒度按"一个可验证的改动"分，别攒成一个巨型 commit：
+
+```
+port: 重锚 #14/#40/#54/#60/#62/#67/#74（新宿主 X.Y.Z）
+port: #54/#60/#62 加 softSettle（旧壳文件拖红）
+port: 关掉 X.Y.Z 新增的上报行
+docs: 记录 X.Y.Z 验收数值
+```
+
+出问题时能单独回退某一步，而不是整批回滚。
 
 ---
 
@@ -141,6 +165,8 @@ for (const p of core.ALL_PATCHES) {
 
 ## 4. 第 3 步：重锚（按失配类型对号入座）
 
+### 4.1 四类失配怎么改
+
 先分类，不同类改法不同。四类覆盖了历史上全部情况：
 
 | 类型 | 表现 | 改法 |
@@ -161,19 +187,85 @@ for (const p of core.ALL_PATCHES) {
 "dshTargets": ["<旧版本...>", "<新版本>"]      // 追加，不动 dshTarget
 ```
 
+### 4.2 新版"该破没破"的地方怎么找
+
+**重锚只保住旧功能。新版本往往同时带来新的限制、新的上报，这些要主动挖，不能等它咬人。**
+
+按性价比排四个必查点：
+
+**① base / web-app 的 cordis.patch.yml 新增了哪些行**（最容易漏，也最要命）
+
+```bash
+for f in dsh-base dsh-web-app; do
+  echo "=== $f ==="
+  diff -u "<旧宿主>/@deepseek-ai/$f/cordis.patch.yml" "<新宿主>/@deepseek-ai/$f/cordis.patch.yml"
+done
+```
+
+新增的插件行分三类处理：
+
+| 类别 | 典型名字 | 处理 |
+|---|---|---|
+| **上报类** | `*inventory*`、`*telemetry*`、`*analytics*`、`*anonymous*`、`*-log-*` | `cordis.patch.yml` 里 `disabled: true`，整条关 |
+| **拦截类** | `*policy*`、`*approval*`、`*guard*`、`*review*`、`*permission*` | 看它是"默认值"还是"硬拦截"；默认值改 config，硬拦截打补丁改成放行 |
+| **能力类** | 新工具 / 新 preset / 新 provider | 通常不用动，但要看它有没有带"使用前需审批"的说明 |
+
+关之前先确认**服务归属**：如果某个服务是别的包 `provide` 的，被关的那条只是消费者，关掉无连带（例：`pluginPackages` 由 `dsh-app-boot` 提供，关 `plugin-package-inventory-deepseek` 不影响任何人）。`super(ctx, "<服务名>")` 出现在哪个包里，服务就归谁。
+
+**② 包列表 diff —— 新包名本身就是线索**
+
+```bash
+diff <(ls "<旧宿主>/@deepseek-ai") <(ls "<新宿主>/@deepseek-ai")
+```
+
+`dsh-*` 里带 `policy` / `approval` / `guard` / `review` / `permission` / `telemetry` / `inventory` 的新面孔，逐个看 `README.zh.md` 三行就够判断。
+
+**③ 关键词 grep（只看 `lib/*.js`，量可控）**
+
+```bash
+grep -rn --include=*.js -iE \
+  "requires approval|must not|do not (refuse|call)|opt[- ]out|telemetry|upload|consent|escalat|deny" \
+  "<新宿主>/@deepseek-ai"/*/lib 2>/dev/null | grep -v "dsh-purge" | head -40
+```
+
+命中的两类要动：**官方新写的劝导/拒绝话术**（今天的 `#54` 就是这类），**新的上报通道**。纯内部逻辑的 hit 跳过。
+
+**④ 前端设置项新增**
+
+设置页里新出现的开关，背后几乎都是一条新限制或新上报，值得点开看一眼它控制什么。
+
+找到之后两种落地方式：
+
+- **能整条关的**（上报、埋点、遥测、清单）→ `cordis.patch.yml` 里 `- id: ... / disabled: true`，比打补丁干净，也不会因为官方改文案而失效
+- **只能改行为的**（拦截逻辑、拒绝话术）→ 加新补丁，`id` 取当前最大值 +1，按 §4 的四类手法写，`markers` 挑一句"只有我们写进去才存在"的文本
+
+**红线：关掉之后功能不能少。** 凡是"关了就少一个能力"的，不能一刀切，要打成"放行"而不是"移除"（例：`approval` 不是删掉整条审批链，是把默认策略改成 never + 无通道时 fail-open）。
+
 ---
 
-## 5. 第 4 步：验证（三条判据，缺一不可）
+## 5. 第 4 步：验证（四条判据，缺一不可）
 
 ```bash
 node scripts/port/check-host.mjs --asar "<新 asar 路径>"
 ```
 
-| 判据 | 含义 |
-|---|---|
-| 首轮 `drifted = 0` | pattern 全部对得上新宿主 |
-| 次轮 `drifted = 0` 且 `already == 首轮命中数` | 幂等，没有"只打中一半"的补丁 |
-| 被改的 JS/YAML 语法全过 | 补丁不能把宿主写坏 |
+| # | 判据 | 含义 |
+|---|---|---|
+| 1 | 首轮 `drifted = 0` | pattern 全部对得上新宿主 |
+| 2 | 次轮 `drifted = 0` 且 `already == 首轮命中数` | 幂等，没有"只打中一半"的补丁 |
+| 3 | 被改的 JS/YAML 语法全过 | 补丁不能把宿主写坏 |
+| 4 | **只增不减**：`git diff` 里没有删掉任何 `pattern` / `replace` / `markers` | 功能不缩窄的机器判据 |
+
+第 4 条是硬闸门 —— "只追加不替换"这条约定光靠自觉不可靠，用 diff 查：
+
+```bash
+# 合并回 local 之前跑。空输出 = 通过。
+# 只盯 pattern / replace / markers：旧的匹配规则一旦删改，旧宿主的命中集合就变了。
+git diff local..HEAD -- lib/core.js | grep -E "^-[^-]" | grep -E "pattern|replace|markers"
+```
+
+**允许**的删除只有两种：`file:` 数组追加元素（改的是同一行）、注释行。
+**不允许**：任何 `pattern` / `replace` / `markers` 被删或改。真要做破坏性改动，必须在提交信息里写清原因和影响面，并在旧宿主上重测一遍。
 
 语法检查（补丁会改 40+ 个文件，必须逐个验 —— 改写坏一个就是宿主启动崩溃）：
 
@@ -258,7 +350,12 @@ node scripts/port/check-host.mjs --asar "<path>/app.asar" --keep
 # 仓库自测
 node --test
 
+# 功能不缩窄的机器判据（合并回 local 之前，空输出才算过）
+git diff local..HEAD -- lib/core.js | grep -E "^-[^-]" | grep -E "pattern|replace|markers"
+
 # 分支操作（不碰工作树）
+git status --short                      # 必须为空
+git checkout -b feat/dsh-<新版本> local # 同一 commit，零文件变动
 git update-ref refs/heads/local refs/heads/feat/dsh-<版本>
 git branch -vv
 git config --get-regexp '^branch\..*\.description$'
