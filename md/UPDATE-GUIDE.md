@@ -10,9 +10,10 @@
 > 你被要求读这份文档时，默认任务是**做只读调研，不是做更新**。你必须按顺序走完四个阶段：
 >
 > **⚡ 先说最常用的那句话：用户只说「读下这个文档」或「跑一遍」时 —— 直接执行 §0.0 的 8 步触发协议**
-> （基线核对 → 宿主闸门 → 拉上游 → 对齐镜像 → 算差异 → 判性质 → 按模板汇报 → 等你圈定），
+> （基线核对 → 宿主闸门 → **探测上游死活** → 拉上游或复用末代基线 → 算差异 → 判性质 → 按模板汇报 → 等你圈定），
 > **一次做完再开口**，不要反问「要做什么」，不要只回「读完了」。
-> 换句话说：这句话 = 「体检 + 拉上游 + 告诉我哪些该跟、哪些不跟」。
+> 换句话说：这句话 = 「体检 + 探上游 + 告诉我哪些该跟、哪些不跟」。
+> **上游自 2026-11-06 起已消失（两地址 404）**，所以第 3 步的探测是每次都必跑的固定动作 —— 详见 §0.0.1。
 >
 > **⓪ 先查宿主闸门**：上游支持哪个 DSH 版本？**当前本机该不该升 DSH？** —— 见 §0.5，这一条优先于一切。
 > **① 先比较**：把「本机正在用的版本」与「候选的新版本」逐项对比，算出到底差了什么。
@@ -35,20 +36,73 @@
 
 | # | 动作 | 依据 / 命令 | 说明 |
 |---|---|---|---|
-| 1 | **基线核对** | §0 表逐项：git 状态、HEAD、副本 189 文件 / `skills` 88、`allowBuilds` 2 行、`/dsh-purge/status` = 77/0/6/85、`app.asar` = False | 有偏差先记下来，**仍然继续走完**，最后单列「基线异常」 |
+| 1 | **基线核对** | §0 表逐项：git 状态、HEAD `cc36574`、副本 189 文件 / `skills` 88、`allowBuilds` 2 行、`/dsh-purge/status` = 78/0/6/86、`app.asar` = False、`app-update.yml` = False、tag `final-upstream-1.1.92` 在 | 有偏差先记下来，**仍然继续走完**，最后单列「基线异常」 |
 | 2 | **宿主闸门** | §0.5.3 三证据（`dshTarget` / README 矩阵 / release-notes） | 不支持就明写「**不能升 DSH**」并给原话依据 |
-| 3 | **拉上游** | `git -C $src fetch upstream --tags --prune` | fetch 失败就报网络问题，其余照跑，别拿旧数据冒充 |
-| 4 | **对齐镜像** | §1.1：能 ff 就 ff；不能 ff 就先打 `upstream-mirror-backup-<日期>` tag 再 `branch -f upstream-mirror upstream/master` 并 push | **只动 `upstream-mirror`，绝不动 `local`** |
+| 3 | **探测上游死活** | §0.0.1 的两地址探测（`YuJunZhiXue` + `HunYiSage`，**必须先跑，不许直接 fetch**） | 上游 2026-11-06 起已消失；探测结果要写进汇报，见 §0.0.1 表 |
+| 4 | **拉上游 / 复用镜像** | 探测可达 → `git -C $src fetch upstream --tags --prune`；**不可达 → 跳过 fetch，直接用 `final-upstream-1.1.92` 标签当 `BASE_REF`** | fetch 128 不是故障，是既定状态；别拿旧数据冒充「上游没动静」 |
+| 4b | **对齐镜像 / 探测复活** | §1.1：能 ff 就 ff；不能 ff 就先打 `upstream-mirror-backup-<日期>` tag 再 `branch -f` 并 push。**上游复活时**才做这一步 | **只动 `upstream-mirror`，绝不动 `local`** |
 | 5 | **算差异** | `git diff --stat local upstream-mirror`；`lib/core.js` / `update.js` / `index.js` 的 blob；§1.5 ② `RANGE_HOSTS` 条目数；`git ls-tree -r --name-only upstream-mirror -- skills` 文件数；`git grep -n 'YuJunZhiXue'` | 数字要写实测值，不要写「看起来没变」 |
 | 6 | **判性质** | 逐提交按 §1.2.3 打标：**增强 / 修复 / 适配 / 收窄 / 删除 / 文档**；用 §1.5.1 能力基线量收窄；**先翻 `UPDATE-LOG.md` 附录 B（已判定不跟清单），别重复提案** | 收窄、删除一律标「**不跟**」，并写清「砍了什么、我们丢了什么能力」 |
 | 7 | **汇报** | 按 §2 模板：差异总览 + 性质分布 + 分组清单（含「性质」列）+ 每条给「跟 / 不跟 / 建议」+ 最后 A~E 选项 | 不许只贴文件列表；不许省掉「不跟」的项目 |
 | 8 | **等指令** | 未收到明确「更新 / 跟 / 执行」前，**一个字节都不改**（§0 顶部的硬性流程） | 用户说「全部更新」才是全部；说「只跟 X」就只动 X |
 
+### 0.0.1 🔭 上游死活探测（**每次巡检必跑第 3 步，2026-11-10 起新增**）
+
+**背景（2026-11-10 实测）**：原作者 `YuJunZhiXue/dsh-purge` 与其新马甲 `HunYiSage/dsh-purge`
+经本机代理（`127.0.0.1:7890`）实测 **双双 404**（`git ls-remote` exit 128 `Repository not found`），
+最后一次提交是 2026-11-06 01:04 的 `fc6e787` = **1.1.92**；镜像作者 `mmparko` 也于 2026-10-12
+声明「暂停更新、不再发版」。⇒ **上游目前是死的**，`fc6e787` 已被钉成 tag **`final-upstream-1.1.92`**。
+
+**但用户要求：每次读文档都要探一次，看上游有没有重新开放。** 所以第 3 步不是可选动作。
+
+```powershell
+$ProgressPreference='SilentlyContinue'
+# 走代理：本机 git 已配 http.https://github.com.proxy = http://127.0.0.1:7890；
+# 若换机器，先补: git config --global http.https://github.com.proxy http://127.0.0.1:7890
+# ⚠️ 必须 2>$null：git 把 404 写到 stderr，pwsh 会当成 NativeCommandError 抛出并污染输出。
+#    判据只看 $LASTEXITCODE，别看输出文本。
+foreach($u in @(
+  'https://github.com/YuJunZhiXue/dsh-purge.git',   # 原作者
+  'https://github.com/HunYiSage/dsh-purge.git'      # 2026-11-04 迁过去的新地址
+)){
+  $h = git ls-remote --heads $u 2>$null
+  "{0,-46} exit={1}  heads=[{2}]" -f $u, $LASTEXITCODE, (($h | ForEach-Object { ($_ -split "`t")[1] }) -join ',')
+}
+```
+
+判定与动作：
+
+| 探测结果 | 含义 | 必须做什么 |
+|---|---|---|
+| 两个地址都 `exit=128` / `Repository not found` | **上游仍是死的**（当前状态） | 跳过 fetch，`BASE_REF` 用 tag `final-upstream-1.1.92`（= `fc6e787`）；汇报里写一句「上游仍 404，无新提交可跟」 |
+| 任一地址 `exit=0` | **⚠️ 上游复活了** | **立刻停手并报告**：把 `upstream` 远端改成新地址 → `git fetch upstream --tags --prune` → §1.1 对齐镜像 → 走完整 §1.2 差异计算 → 按 §2 模板汇报。**未经用户圈定不许 port** |
+| `exit=0` 但 heads 为空 / 仓库改名转到别处 | 空壳或改址 | 用 `Invoke-RestMethod https://api.github.com/repos/<owner>/<repo>` 确认 `full_name` 与 `pushed_at`，把结论写进汇报 |
+
+**复活后的额外动作**（一次性，别漏）：
+
+```powershell
+$src='$SRC'
+git -C $src remote set-url upstream <新地址>
+git -C $src fetch upstream --tags --prune
+git -C $src tag -f final-upstream-1.1.92 fc6e787   # 旧末代基线保留，别删
+git -C $src tag ("upstream-revived-" + (Get-Date -Format 'yyyyMMdd')) upstream/master
+```
+
+> **顺手扩展侦察（可选，成本很低）**：GitHub 搜索常能发现同类马甲/接盘仓库，
+> 复活线索往往先出现在这里 —— `Invoke-RestMethod 'https://api.github.com/search/repositories?q=dsh-purge+in:name&sort=updated&per_page=20'`。
+> 2026-11-10 实扫到 `luowang-ui/dsh-purge-plus`（105★）、`lhg-projects/dsh-purge`（21★）、
+> `wxcvm/dsh-purge`（6★）等 20 个活跃 fork，但**都不是原作者**，不作为上游判据，只当线索。
+
+> ⚠️ **探测失败 ≠ 网络故障**：`exit 128 Repository not found` 是 GitHub 的明确答复（仓库不存在或已转私有）。
+> 只有 `Could not resolve host` / `Connection timed out` / `Failed to connect` 才叫网络问题。
+> 别把「404」误报成「我这边网不通，查不了」。
+
 **三种收尾，只许选一种：**
 
 | 情况 | 必须这样回 |
 |---|---|
-| 基线全绿、上游无新提交 | 一句话结论 + 实测值：「基线全绿（77/0/6/85、副本 189/88、asar=False），上游仍是 `<sha>`（`<版本>`），**无新提交**。」 |
+| 基线全绿、上游仍 404 | 一句话结论 + 实测值：「基线全绿（78/0/6/86、副本 189/88、asar=False、`app-update.yml`=disabled），上游两地址仍 404，末代基线 `final-upstream-1.1.92`=`fc6e787`，**无新提交可跟**。」 |
+| 基线全绿、上游无新提交 | 一句话结论 + 实测值：「基线全绿（78/0/6/86、副本 189/88、asar=False），上游仍是 `<sha>`（`<版本>`），**无新提交**。」 |
 | 有新提交 | 走完第 5–7 步，把「该跟 / 不该跟」分两栏列清，最后给 A~E 选项等圈定 |
 | 基线有偏差 | **先讲异常**（哪一项、期望值、实测值、会导致什么），再讲上游差异；未修好之前不建议动上游 |
 
@@ -85,30 +139,32 @@
 巡检本身继续走完（见 §0.0 第 1 步），但**不要带着基线异常进入执行阶段**。
 
 > **历史沿革（rc.3 事故、杀软导致 `spawn EPERM`、每次验收的实测值）全部在 `md\UPDATE-LOG.md`。**
-> 这里只留一条硬结论：**补丁层现在是生效态**（77/0/6/85，`drifted=0`），`app.asar` 已改名，
-> 上游从 1.1.82 起是「净化线」（`skills/` 清空、`RANGE_HOSTS` 0、`permittedHost` 恒 false），
+> 这里只留一条硬结论：**补丁层现在是生效态**（78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file，共 86，`drifted=0`），
+> `app.asar` 与 `app-update.yml` 均已改名，**上游已消失（两地址 404），末代基线 = tag `final-upstream-1.1.92`（`fc6e787` = 1.1.92）**。
+> 上游从 1.1.82 起就是「净化线」（`skills/` 清空、`RANGE_HOSTS` 0、`permittedHost` 恒 false），
 > 所以**永远不要**用 `git checkout upstream-mirror -- <目录>` 整目录同步，只能按 §1.2.3 逐 hunk 取。
 
 | 项 | 期望值 | 现状（巡检时核对） |
 |---|---|---|
 | 源码目录 | `$SRC` | ✓ |
 | 当前分支 | `local` | ✓ |
-| 当前 HEAD | `e499e03`（`local: allowBuilds 兼容 pnpm 11.28.5 的 file: 依赖`；上一版 `a162c8f` = 1.1.88 移植） | ✓ 已 push，`origin/local` = `e499e03`；tag `port-1.1.88-20261102` |
-| port 移植链（底→顶） | `6667999`（seal schema / 6cb2ac3）→ `a6786ee`（#108 / 5d4b45c）→ `becd6aa`（#157 #154 #155 / 671011a）→ `a114362`（#162 #159 / af7cd22）→ `5f7bbc2`（1.1.79 / 24f4a7f）→ `1f0727f`（1.1.80 / 9a8e848）→ `b14e956`（DSH NEXT + 单测 / a0005ac）→ `b124add`（1.1.81 notes / 160b911）→ `c7ab58e`（1.1.82 #180 / 0c933dc）→ `115de05`（1.1.86 / 1bdf239）→ `b771e39`（补回 web-preflight-entry）→ `3523463`（1.1.87 / 335ddee）→ `a162c8f`（1.1.88 / d1eff01） | ✓ **13 条** |
-| `local:` 定制清单 | `git -C $src log --oneline --grep='^local:' local` | ✓ 4 条：`d246244`（安装源）、`efcc00c`（`files[]` 加 `skills` + `install:skill`）、`0f7ba6c`（修 `allowBuilds` 键被第一个冒号截断）、`e499e03`（allowBuilds 兼容 pnpm 11.28.5 的 `file:` 依赖） |
-| 远端 `origin` | `https://github.com/wyybs/dsh-purge.git`（`local` = 活分支；`master` `4c98517` 存档；`upstream-mirror` `0c933dc`） | ✓ |
-| 远端 `upstream` | `https://github.com/YuJunZhiXue/dsh-purge.git`，最新 `d1eff01`（**1.1.88**） | ✓ 已 fetch；`dshTarget` 仍 `0.2.1-rc.2`，**新增 `dshTargets` = [`0.2.1-rc.2`, `0.2.1-rc.5`]** |
-| **上游镜像分支** | **`upstream-mirror`** = `d1eff01`（1.1.88；`0c933dc`→`1bdf239`→`d1eff01` 均为 ff） | ✓ 与 `upstream/master` 同点，已 push；快照 tag 见下行 |
-| 上游快照 tag | `upstream-snapshot-20261023-ca848d7`、`…-ba12c91`、`…-20261027-24f4a7f`、`…-20261028-160b911`、`upstream-snapshot-20261029-0c933dc`、`upstream-mirror-backup-20261029` | ✓ 已 push |
-| 上游与 fork 关系 | **无共同祖先**（`merge-base` 为空），上游 21 个提交，fork 250 | ✓ `rev-list --left-right --count upstream/master...local` = `21 250` |
+| 当前 HEAD | `cc36574`（`local: 文档基线同步到 1.1.92-port`） | ✓ 已 push，`origin/local` = `cc36574`；工作区 clean |
+| port 移植链（底→顶） | `6667999`（seal schema / 6cb2ac3）→ `a6786ee`（#108 / 5d4b45c）→ `becd6aa`（#157 #154 #155 / 671011a）→ `a114362`（#162 #159 / af7cd22）→ `5f7bbc2`（1.1.79 / 24f4a7f）→ `1f0727f`（1.1.80 / 9a8e848）→ `b14e956`（DSH NEXT + 单测 / a0005ac）→ `b124add`（1.1.81 notes / 160b911）→ `c7ab58e`（1.1.82 #180 / 0c933dc）→ `115de05`（1.1.86 / 1bdf239）→ `b771e39`（补回 web-preflight-entry）→ `3523463`（1.1.87 / 335ddee）→ `a162c8f`（1.1.88 / d1eff01）→ `1ed1662`（补 1.1.86/1.1.83 漏移植）→ `feb9c06`（1.1.89 pattern 幂等 + 桌面退出留痕）→ `3770ade`（1.1.91 原子写保权限）→ `ea19c45`（1.1.91 pnpm12 来源键）→ `862fdb0`（1.1.91 靶场门禁放宽 = 32 条白名单） | ✓ **17 条**（最新 2026-11-06） |
+| `local:` 定制清单 | `git -C $src log --oneline --grep='^local:' local` | ✓ **11 条**：`d246244`（安装源→wyybs）、`efcc00c`（`files[]` 加 `skills` + `install:skill`）、`0f7ba6c`（修 `allowBuilds` 冒号截断）、`e499e03`（兼容 pnpm 11.28.5）、`6e60e01`（文档迁入 `src\md`）、`ec1886a`（脱敏）、`3d52095`（附录 F）、`082b157`（附录 G）、`ce5fad4`（面板 `own.hint` 同步 1.1.91 门禁）、`eb1af34`（修 #92/#93 二次 apply 叠加 + 来源键收紧）、`cc36574`（文档基线同步 1.1.92-port） |
+| 远端 `origin` | `https://github.com/wyybs/dsh-purge.git`（`local` = 活分支；`master` `4c98517` 存档；`upstream-mirror` `fc6e787`） | ✓ |
+| 远端 `upstream` | `https://github.com/YuJunZhiXue/dsh-purge.git` —— **2026-11-10 起 404（`Repository not found`），上游已消失**；原 `dshTarget` = `0.2.1-rc.2`、`dshTargets` = [`0.2.1-rc.2`, `0.2.1-rc.5`] | ✗ **不可 fetch**；迁址后的 `HunYiSage/dsh-purge` 同样 404。末代提交 `fc6e787`（1.1.92），已钉 tag `final-upstream-1.1.92`；每次巡检按 §0.0.1 复探 |
+| **上游镜像分支** | **`upstream-mirror`** = `fc6e787`（= 1.1.92 = 末代上游）；**已冻结，不再跟随** | ✓ 与 tag `final-upstream-1.1.92`、`upstream-snapshot-20261106-fc6e787` 同点，已 push |
+| 上游快照 tag | `upstream-snapshot-20261023-ca848d7`、`…-ba12c91`、`…-20261027-24f4a7f`、`…-20261028-160b911`、`upstream-snapshot-20261029-0c933dc`、`upstream-mirror-backup-20261029`、`upstream-snapshot-20261106-fc6e787`、`upstream-mirror-backup-20261106`、**`final-upstream-1.1.92`**、`baseline-mmparko-1.1.71` | ✓ 全部已 push |
+| 上游与 fork 关系 | **无共同祖先**（`merge-base` 为空） | ✓ `git merge-base local upstream-mirror` = 空（上游 force-push 换过历史）；但 `local ⊇ mmparko 1.1.71`，`merge-base local baseline-mmparko-1.1.71` = `6c1d638` |
 | 宿主依赖 | `<USERPROFILE>\.dsh\profiles\desktop\package.json` → `"dsh-purge": "file:$SRC"` | ✓（`dsh.profile.bundles` 7 项含 `dsh-purge`；`cordis.patch.yml` L25-26 有本体 insert） |
 | 安装副本 | `<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge`，**189 文件**，逐文件比对 **DIFF=0**、MISSING 14（5 个打包白名单外 + 9 个 `test/`），**独立拷贝**（`LinkType` 为空） | ✓ 含 `skills\`（88 文件）、`lib\anchor.js`、`lib\bin-preflight.js`、`lib\subagent-control.js`、`lib\web-reclaim.js` |
 | `pnpm-workspace.yaml` | `allowBuilds:` **2 行**：裸包名 `dsh-purge` + `"dsh-purge@file:D:/…/src"`（含 `:` 的键必须双引号；`e499e03` 起由插件自动维护并自愈） | ✓ L14-15 实测两行；**旧的「3 行含 tarball URL」写法已废弃**（`https://` 键会被 pnpm 11 当版本联合解析） |
-| 版本号 | `src/package.json` 保持 `1.1.73`（**永不改 version 字段**）；上游已到 **1.1.88** | ✓ 源码与副本都是 1.1.73 |
-| tag | `v1.1.73`、`v1.1.73-wyybs`、`v1.1.73-wyybs-port1`（=6667999）、`-port2`（=5f7bbc2）、`v1.1.81-wyybs-port3`（=efcc00c）、`v1.1.81-wyybs-port3.1`（=0f7ba6c）、`v1.1.82-wyybs-port4`（=c7ab58e ← **当前 HEAD**）、`pre-port-20261027`、`pre-rc3-rescue-20261027`、`upstream-mirror-backup-20261029`、5 个 `upstream-snapshot-*` | ✓ 全部已 push |
+| 版本号 | `src/package.json` 保持 `1.1.73`（**永不改 version 字段**）；末代上游是 **1.1.92** | ✓ 源码与副本都是 1.1.73 |
+| tag | `v1.1.73`、`v1.1.73-wyybs`、`v1.1.73-wyybs-port1`（=6667999）、`-port2`（=5f7bbc2）、`v1.1.81-wyybs-port3`（=efcc00c）、`…-port3.1`（=0f7ba6c）、`v1.1.82-wyybs-port4`（=c7ab58e）、`pre-port-20261027`、`pre-rc3-rescue-20261027`、`rc2-freeze-20261106`、`pre-update-20261106-133222`、`upstream-mirror-backup-*`、`upstream-snapshot-*`、**`final-upstream-1.1.92`**、**`baseline-mmparko-1.1.71`** | ✓ 全部已 push |
 | **`app.asar`** | **必须是 False**（已改名为 `app.asar.bak`） | ✓ `False`；`app.asar.bak` = True（182,794,869 B）；`resources\app` = True（18367 文件 / 416.3 MB） |
-| **补丁状态** | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86 条）**；`drifted = 0`、无 `errors.log` | ✓ `applied.json` = `2026-11-06T05:43:33Z`；二次 `--apply` 零写入（幂等）；`#80` skipped、`#71 missing_file` 均属预期 |
-| **宿主** | **0.2.1-rc.2**（rc.3 起不来 → 用户手动降级）；`app-update.yml` 已改名 `.disabled` 掐断 nightly | ✓ `FileVersion` = 0.2.1-rc.2；GUI 端口每次重启都换（当前 49880） |
+| **`app-update.yml`** | **必须是 `.disabled`**（掐断 nightly 自动更新；**插件自己的 `autoUpdateIfNeeded()` 管不到宿主 Electron**） | ✓ 2026-11-10 已实测改名：`app-update.yml` = False、`app-update.yml.disabled` = True（306 B）。内容 `channel: nightly`、`url: https://download.deepseek.com/dsh-desk/feeds/win-x64/` |
+| **补丁状态** | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86 条）**；`drifted = 0`、无 `errors.log` | ✓ `/dsh-purge/status` 实测 `patches_applied=68 / ready=70 / na=6 / skipped=2 / drifted=0`（rollup 口径），`patch_status` 明细 `applied 78 / na 6 / missing_file 1 / skipped 1`（patch id 口径）—— 两套口径别混；`#80` skipped、`#71 missing_file` 均属预期 |
+| **宿主** | **0.2.1-rc.2**（rc.3 起不来 → 用户手动降级）；`app-update.yml` 已改名 `.disabled` 掐断 nightly | ✓ `FileVersion` = 0.2.1-rc.2；GUI 端口每次重启都换 |
 | **本会话 shell** | `pwsh` 可用（§0 顶部：EPERM 是杀软导致，已解决） | ✓ 全部命令可跑 |
 | **DSH 支持矩阵** | 上游 `dshTarget` 仍 `0.2.1-rc.2`；1.1.88 起 `dshTargets` 声明接受 **rc.2 + rc.5**，但 **README 仍写 rc.3 及更新不支持**（声明自相矛盾） | ✓ `dshTarget`=`0.2.1-rc.2`；rc.5 属「上游自称支持、README 未改口」，**需本机离线实测后才写进文档** |
 | **能不能升 DSH** | **rc.2 不动；rc.5 未经实测不升** | ✗ 见 §0.5 —— 升 rc.5 前先按 §1.2 的离线比对法，在 rc.5 的 `resources\app` 副本上跑一遍 86 条，drifted 必须为 0 |
@@ -118,7 +174,7 @@
 > | 层 | 从哪加载 | 现在状态 | 坏了的表现 |
 > |---|---|---|---|
 > | **插件本体**（命令、面板、红队 preset、64 个工具） | `~/.dsh/profiles/desktop/node_modules/dsh-purge` | ✓ 在、189 文件、独立拷贝、`version` 1.1.73 | 面板没按钮 / 命令不存在 / 红队工具变少 |
-> | **宿主补丁层**（82 个 `core.js` 补丁：审批门、沙箱策略、提示词注入、隐藏控制台等） | `resources\app\`（解包目录） | ✓ `app.asar` 已改名，applied=61 / pending=0 / skipped=5 | `/purge status` 报 `✗ app.asar: 还在`、applied=0 |
+> | **宿主补丁层**（86 个 patch id：审批门、沙箱策略、提示词注入、隐藏控制台等） | `resources\app\`（解包目录） | ✓ `app.asar` 已改名，78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file | `/purge status` 报 `✗ app.asar: 还在`、applied=0 |
 >
 > 换句话说：**插件自己的面板和红队工具在没有补丁时照样能用**（它们只是普通插件代码）；
 > 补丁管的是「宿主对模型的限制」。所以「现在 purge 能用吗」的答案是：
@@ -141,7 +197,9 @@ foreach($r in @('local','origin/local','origin/master','upstream-mirror')){
   "{0,-16} {1}" -f $r, (git -C $src rev-parse --short $r)
 }
 (Get-Content '<USERPROFILE>\.dsh\profiles\desktop\package.json' -Raw | ConvertFrom-Json).dependencies.'dsh-purge'
-Test-Path '<DSH_ROOT>\resources\app.asar'
+Test-Path '<DSH_ROOT>\resources\app.asar'          # 必须 False
+Test-Path '<DSH_ROOT>\resources\app-update.yml'    # 必须 False（已改名 .disabled）
+git -C $src tag -l 'final-upstream-1.1.92' 'baseline-mmparko-1.1.71'   # 末代上游 / 1.1.71 基线
 ```
 
 > ⚠️ **宿主目录名带空格，硬编码路径会「假报不存在」。** 2026-11-02 实测：
@@ -180,7 +238,7 @@ Test-Path '<DSH_ROOT>\resources\app.asar'
 4. 升 DSH 之后**必须重走一遍** `/purge apply` 解包 + 用户手动改名 `app.asar` → `app.asar.bak`（§4.6.1）。
    这不是可选步骤 —— 宿主的升级程序会把 `resources\app\` 整个删掉、把 `app.asar` 放回来。
 
-### 0.5.2 上游支持矩阵（2026-11-02 快照，`upstream-mirror` = `d1eff01` = 1.1.88）
+### 0.5.2 上游支持矩阵（2026-11-10 快照，末代上游 = tag `final-upstream-1.1.92` = `fc6e787` = 1.1.92）
 
 | DSH 宿主版本 | 该用哪个 dsh-purge | 上游原话 |
 |---|---|---|
@@ -205,27 +263,36 @@ release-notes 原文（`release-notes.md` L26 / L35）：
 
 ```powershell
 $src='$SRC'
-git -C $src fetch upstream --tags --prune 2>&1 | Out-Null
+# ⚠️ 上游已 404（§0.0.1）。先探活：可达才 fetch；不可达就把 BASE_REF 指向末代 tag，
+# 下面三条 git show 全部用 $BASE 而不是 upstream/master（后者 fetch 失败后是不可靠的陈旧 ref）。
+# 2>$null：git 把 404 写到 stderr，pwsh 会当成 NativeCommandError 抛出。
+$BASE='final-upstream-1.1.92'
+git -C $src ls-remote --heads https://github.com/YuJunZhiXue/dsh-purge.git 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+  git -C $src fetch upstream --tags --prune 2>$null
+  $BASE='upstream/master'
+} else { '上游不可达（404）→ BASE = ' + $BASE }
 
 '=== ① 上游版本 + dshTarget ==='
-git -C $src show upstream/master:package.json | ConvertFrom-Json |
-  Select-Object version, dshTarget | Format-List
+git -C $src show "${BASE}:package.json" | ConvertFrom-Json |
+  Select-Object version, dshTarget, dshTargets | Format-List
 
 '=== ② 上游 README 兼容矩阵原话 ==='
-git -C $src show upstream/master:README.md |
+git -C $src show "${BASE}:README.md" |
   Select-String -Pattern 'targets \*\*DSH|not supported|use \*\*1\.1\.|Stay on' |
   ForEach-Object { '  ' + $_.Line.Trim() }
 
 '=== ③ 上游 release-notes 的版本声明（最近 3 条）==='
-git -C $src show upstream/master:release-notes.md |
+git -C $src show "${BASE}:release-notes.md" |
   Select-String -Pattern 'target DSH|适配 DSH|rc\.3|rc\.4' |
   Select-Object -First 6 | ForEach-Object { '  ' + $_.Line.Trim() }
 
 '=== ④ 本机现状对照 ==='
 '  本机宿主  : ' + (Get-Item '<DSH_ROOT>\DeepSeek Harness.exe').VersionInfo.FileVersion
 '  本机插件  : ' + (Get-Content "$src\package.json" -Raw | ConvertFrom-Json).version
-'  插件 dshTarget : ' + ((git -C $src show upstream/master:package.json | ConvertFrom-Json).dshTarget)
+'  插件 dshTarget : ' + ((git -C $src show "${BASE}:package.json" | ConvertFrom-Json).dshTarget)
 '  app.asar  : ' + (Test-Path '<DSH_ROOT>\resources\app.asar') + '  (必须是 False)'
+'  update.yml: ' + (Test-Path '<DSH_ROOT>\resources\app-update.yml') + '  (必须是 False)'
 ```
 
 判定：
@@ -311,15 +378,29 @@ foreach($p in $ports){
 
 ### 1.1 先把远端最新状态拉下来（不改本地分支）
 
+> ⚠️ **2026-11-10 起：上游已 404，`git fetch upstream` 必然 exit 128。**
+> **先跑 §0.0.1 探活**：不可达 → 跳过 `fetch upstream`，把 `$BASE` 指向 tag `final-upstream-1.1.92`；
+> 可达 → 才走下面的 fetch + 镜像对齐。别把 128 当故障排查，也别拿陈旧 ref 冒充「上游没动静」。
+
 ```powershell
 $src='$SRC'
 git -C $src fetch origin --tags
-git -C $src fetch upstream --tags
+
+# 上游探活（§0.0.1）—— 只有可达才 fetch；2>$null 防 pwsh 把 stderr 当异常抛
+git -C $src ls-remote --heads https://github.com/YuJunZhiXue/dsh-purge.git 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+  git -C $src fetch upstream --tags --prune
+  $BASE='upstream/master'
+} else {
+  '上游不可达（404）→ 复用末代基线，跳过 fetch'
+  $BASE='final-upstream-1.1.92'
+}
 # 注意：--short 只接受单个 rev，多 rev 会报 fatal: Needed a single revision
-foreach($r in @('local','origin/local','origin/master','upstream-mirror')){ "{0,-16} {1}" -f $r, (git -C $src rev-parse --short $r) }
+foreach($r in @('local','origin/local','origin/master','upstream-mirror',"$BASE")){ "{0,-24} {1}" -f $r, (git -C $src rev-parse --short $r) }
 ```
 
-拉完顺手把镜像分支对齐，并给上游留一个快照 tag。**先判能不能 ff，不能就重建（2026-10-29 起上游会重写历史）**：
+拉完顺手把镜像分支对齐，并给上游留一个快照 tag。**先判能不能 ff，不能就重建（2026-10-29 起上游会重写历史）**。
+**这一段只在上游可达时执行**：
 
 ```powershell
 $src='$SRC'
@@ -368,18 +449,23 @@ git -C $src push -q origin ("upstream-snapshot-" + (Get-Date -Format 'yyyyMMdd')
 Test-Path '<DSH_ROOT>\resources\app.asar'
 # False = 正常；True = 宿主升级过，补丁已失效
 
+# ②b app-update.yml 是否又回来了 ← 第二强信号（回来了 = 升级通道又通了，随时会自己升）
+Test-Path '<DSH_ROOT>\resources\app-update.yml'
+# False = 正常（.disabled）；True = 有人重装宿主，立刻让用户改名
+
 # ③ app\ 解包目录的写入时间（宿主升级会覆盖它）
 (Get-Item '<DSH_ROOT>\resources\app').LastWriteTime
 
 # ④ 补丁实际状态（宿主升级后 applied 数会掉）
-#    在应用内跑 /purge status，看 "补丁 / patches: N/66 applied"
+#    在应用内跑 /purge status，或 GET http://127.0.0.1:<端口>/dsh-purge/status
 ```
 
 判定表：
 
 | 现象 | 结论 | 动作 |
 |---|---|---|
-| 版本仍是 `0.2.1-rc.2`，`app.asar` 为 False | 宿主没动、补丁在生效（**当前状态 ✓**） | 继续 §1.2.2 查上游 |
+| 版本仍是 `0.2.1-rc.2`，`app.asar` 为 False，`app-update.yml` 为 False | 宿主没动、补丁在生效、升级通道已掐断（**当前状态 ✓**） | 继续 §1.2.2（含 §0.0.1 探活） |
+| **`app-update.yml` 又变成 True** | 有人重装了宿主安装包或还原了 resources | **立刻让用户改名 `.disabled`**（不用重启，改名即生效）；再查 `app.asar` 与 applied 数 |
 | `app.asar` 变成 True，但 `app\` **还在** | 宿主升级过（归档被放回，解包目录里补丁可能仍可读） | 先 `/purge status` 看 applied 数；掉了就把 `app.asar` 改名（**让用户做**，见 §4.6.1）|
 | **`app.asar` 为 True，且 `app\` 不存在** | **最惨：升级把解包目录删了，补丁全部失效，插件等于没装** | ① 应用内 `/purge apply` 重新解包 → ② 完全退出宿主（含 WorkBuddy）→ ③ 用户手动把 `app.asar` 改名成 `app.asar.bak` → ④ 重开宿主（详见 §4.6.1） |
 | 跑完脚本 applied 仍 < 61 | 宿主源码变了，补丁匹配不上 | **这时才需要上游适配后的 `core.js`**，进 §1.5 ① 查 blob |
@@ -400,9 +486,14 @@ Test-Path '<DSH_ROOT>\resources\app.asar'
 |---|---|---|
 | **活分支 `local`（这是「本机在用的」）** | `git -C $src log --oneline local -5` | 我们实际安装的那棵树。**所有对比的左边一律用它** |
 | 自己 fork 的 `origin/local` | `git -C $src log --oneline origin/local -5` | 已推送的活分支，与 `local` 应一致 |
-| 原作者 `upstream-mirror`（= `upstream/master`） | `git -C $src log --oneline upstream-mirror -5` | YuJunZhiXue 的新提交 |
+| 原作者 `upstream-mirror`（= 末代 tag `final-upstream-1.1.92`） | `git -C $src log --oneline upstream-mirror -5` | YuJunZhiXue 的提交；**已冻结在 `fc6e787`（1.1.92）** |
+| **上游是否复活** | §0.0.1 的两地址探活（`YuJunZhiXue` + `HunYiSage`） | **每次巡检必跑**。复活 → 立刻报告并按 §0.0.1 的额外动作重设 upstream 远端 |
 | 新 tag | `git -C $src tag --list --sort=-creatordate \| Select-Object -First 10` | 带版本号的发布点 |
-| 新的 GitHub Release | 看 `https://github.com/wyybs/dsh-purge/releases` 与 `https://github.com/YuJunZhiXue/dsh-purge/releases` | 常附 release-notes.md |
+| 新的 GitHub Release | 看 `https://github.com/wyybs/dsh-purge/releases`；原作者地址已 404，改看 §0.0.1 的搜索线索 | 常附 release-notes.md |
+
+> **上游死后的口径**：`upstream-mirror` 已冻结，`git diff local upstream-mirror` 的差异**不会自己变化**。
+> 所以「有没有新东西」这个问题的答案将长期是「没有」，除非 §0.0.1 探活成功。
+> 这不代表可以不跑 —— 探活就是这一步的全部意义。
 
 #### 1.2.3 判定优先级（**先于一切 blob 判据，按序判、后者不得推翻前者**）
 

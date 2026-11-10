@@ -8,6 +8,67 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-10 10:20 上游消失定案 + 1.1.71 包含性核查 + `app-update.yml` 掐断
+
+> 本轮起因：经代理重测上游，确认**不是网络问题、是仓库真没了**。顺带做了三件事（改名、钉基线、写核查）。
+> 全部动作都是**只读 + 加 tag + 改名**，`local` 一个字节没动（HEAD 仍是 `cc36574`，工作区 clean）。
+
+**1. 上游死活定案（关键结论）**
+
+- 之前几轮 `git ls-remote upstream` / `fetch` 报 `exit 128 Repository not found`，曾疑为未走代理。
+  本轮经 `127.0.0.1:7890`（git 已配 `http.https://github.com.proxy`）**重测**，结论不变：
+  - `https://github.com/YuJunZhiXue/dsh-purge.git` → **exit 128** `Repository not found`
+  - `https://github.com/HunYiSage/dsh-purge.git`（2026-11-04 迁址）→ **exit 128** 同上
+  - `https://github.com/wyybs/dsh-purge.git`（自家）→ exit 0，4 个 head 正常
+  - `https://github.com/mmparko/dsh-purge.git`（镜像）→ exit 0，3 个 head 正常
+- **匿名视角下「转私有」与「删库」返回同一句 `Repository not found`，外部无法区分。**
+  但结合提交序列更像**删库收摊**：11-04 迁址 → 11-05 连发 5 条 docs（冒充/收费诈骗声明、停用频道、商业授权页去个人邮箱）
+  → 11-06 00:45 称技能库为付费内容 → 00:49 自我推翻 → 01:04 `fc6e787` 发 1.1.92 并同时把 `poc_*` 8 工具改成 `KB_DISABLED`
+  → **此后零提交，两地址 404**。
+- **动作：把末代基线钉成 tag**（`refs/remotes/*` 会被 `fetch --prune` 扫掉，tag 不会）：
+  - `final-upstream-1.1.92` → `fc6e787`（1.1.92）
+  - `baseline-mmparko-1.1.71` → `033e6bd`（mmparko 镜像末版 1.1.71）
+  - 两个 tag 都是 annotated，`^{commit}` 解引用已验证；**未 push**（等用户确认，见 §0.0.1 的复活流程）。
+- **协议变更**：`UPDATE-GUIDE.md` §0.0 第 3 步从「直接 fetch 上游」改为「**先探活两地址**」，
+  新增 §0.0.1 专门写探测命令、判定表、复活后的额外动作。**用户要求每次读文档都探一次**（原话见下）。
+  > 用户原话（m00224）：「然后记录下上游，就是我每次让你读文档的时候你也去上游访问下，看他们后续是否将仓库打开了。到时候如果打开了 就重新拉下来跟我们现在对比」
+
+**2. `app-update.yml` 掐断（P0，实测文档与现状不符）**
+
+- `UPDATE-GUIDE.md` §0 / §4.7 都写「`app-update.yml` 已改名 `.disabled`」，**实测根本没改**：
+  `resources\app-update.yml` 仍在、306 B、`channel: nightly`、`url: https://download.deepseek.com/dsh-desk/feeds/win-x64/`。
+  > 口径矛盾：本条下方的 **2026-10-28 15:12** 条目明确记录过「`resources\app-update.yml` → `app-update.yml.disabled`」，
+  > 而本轮实测它是原始名。两种可能 —— ① 之后用户重装过 rc.2 安装包把它还原了；② 当天那条记录是计划未落地。
+  > **无法从现有证据区分**，故按实测为准：**从今天起这一项列入 §0 基线表逐次核对**。
+- 为什么这是真风险：插件自己的 `lib/update.js:1128` `autoUpdateIfNeeded()` 直接 `return {auto:true, skipped:"manual-only"}`
+  —— **只管住插件这条更新路径，完全管不到宿主 Electron 的 autoUpdater**。宿主的更新由这个 yml 驱动，
+  `nightly` 通道随时可能推新构建 → 一旦自升就触发 §4.7 那串连锁（`resources\app\` 被删、`app.asar` 放回、86 条补丁全灭）。
+- **动作**：`Rename-Item resources\app-update.yml → app-update.yml.disabled`（不需重启，改名即生效）。
+  复核：`app-update.yml` = False、`app-update.yml.disabled` = True（306 B）。
+- 文档同步：§0 基线表新增 `app-update.yml` 行；§1.2.1 新增「②b」检查项与「又变成 True」的判定行；
+  §0.5.3 脚本改为双 `Test-Path`。
+
+**3. 1.1.71 包含性核查（回答「mmparko 那个 1.1.71 的功能我们都有吗」）**
+
+- 血统确认：`git merge-base local baseline-mmparko-1.1.71` = `6c1d638` ⇒ **1.1.71 是我们的祖先线**。
+  另：`git merge-base local upstream-mirror` = **空**（上游 force-push 换过历史，无共同祖先）。
+- 量化（完整表见**附录 H**）：文件 203 vs 109（只少 `MIRROR-NOTICE.md`，纯文档）·
+  红队工具 **64 ⊃ 56**（只多不少，多 8 个 evidence/unknown 类）· 补丁 id **86 ⊃ 82** · skills **88 ⊃ 23** ·
+  面板标识词 **509 ⊃ 490** 且**零丢失** · `presets/redteam` 三件完全一致 · `package.json` scripts 无缺失。
+- 唯一实质发现：local 比 1.1.71 少 8 个导出符号，**是上游自己在 `335ddee`（1.1.87 死代码清理）删的**
+  （该提交 48 files / +890 −1652，顺手删光 `test/**` 11 个测试文件），1.1.92 同样没有。
+  能力全部换层实现，详见附录 H。
+- 遗留尾巴：`lib/index.js:840` 的 `rewind.wrapSessionDeriveMessages(session)` 是悬空调用
+  （rewind.js 已无该导出，被 `try/catch` 静默吞掉）—— **`upstream-mirror:lib/index.js:840` 一字不差同样存在**，
+  属双方同病、零危害。**决定不修**：`lib/index.js` blob `4336a090` 与上游完全相同，是仅剩的零差异文件，
+  为 3 行制造 DIFF 不值（见附录 F #10）。
+
+**4. 本轮没做**
+
+- 没 push 两个新 tag（`local` 也没动）—— 等用户确认。
+- 没清 `refs/remotes/probe/mmparko-{master,archive}`（已用 `baseline-mmparko-1.1.71` 保住证据链，清不清都行）。
+- 没跑 `pnpm install`、没重启宿主、没碰 `app.asar`。
+
 ### 2026-11-06 13:43 增量 port 到上游 1.1.92（只收扩宽）：78/86 applied、0 pending、0 drifted
 
 - 上游 `d1eff01`(1.1.88) → `fc6e787`(**1.1.92**)，且 force-push 改写历史（`git merge-base` 不通）。
@@ -248,6 +309,8 @@
 | `335ddee`(1.1.87) 删 `test/**` 11 个文件 + `package.json` 的 `test` 脚本 | 宣称「发布 CI 只做语法检查」 | **不跟。** 本机 85 个用例是唯一的回归网；本轮就靠它抓出 #32 幂等 bug |
 | `6f9c500`(1.1.83) 起 `rollupPatchStatus` 让 `drifted` 压过 `applied`/`already` | 状态汇总优先级调整 | **回退。** 多文件补丁里「另一个构建产物本来不含这段代码」会被判红 → 状态页常年假告警，真漂移被淹。保留「已写入优先」，`a162c8f` 里写明 |
 | 1.1.84 起 `client.js` / `lib/redteam/{client,ui}` 红队面板中文化重排 | 英文文案 → 中文，配套 CSS | **不跟（文案层）。** 本机保留现面板；这三个文件连同 `store-core`/`tools`/`score-rules`/`platform-config` 仍停在 1.1.73–1.1.82，属遗留项，需单轮做（`store-core`/`tools` 里含本机 POC 知识库，**不能整文件覆盖**） |
+| 2026-11-06 01:04 `fc6e787` = **1.1.92 末代提交** | 随包 23 条 `skills/redteam/*.md`；`package.json` `files[]` 加 `skills`；同时 `poc_*` 8 工具改 `KB_DISABLED` | **技能库不用跟**（我们 88 ⊃ 上游 23，且多 `evidence-discipline.md`）；**`poc_*` 下架不跟**（同附录 B 上一条）。此提交后上游两地址 404，**再无可跟内容**。末代基线已钉 tag `final-upstream-1.1.92` |
+| 2026-11-04 `95bc62f` + `a89f986` 全仓迁 `HunYiSage/dsh-purge` | install 三处 + `REPO` 常量 + `welcome.repo` + CI 守卫 全改地址 | **整体不跟**（写死地址）。`git grep HunYiSage` 复查 0 处；`dsh.install` 仍指 `wyybs/.../local`。且该地址现已 404 |
 
 ---
 
@@ -338,6 +401,7 @@
 | 7 | 面板文案四件：`client.js`、`lib/redteam/client.js`、`lib/redteam/ui.js`、`score-rules.js` | 停在 1.1.80–1.1.82 | **纯中文化重排**（英文 → 中文），按「纯文案不跟」原则 | —— | P3：**永远不碰**，除非要切中文界面 |
 | 8 | `rc.5` 适配实测 | `dshTargets` 已声明 rc.2+rc.5，6 条补丁双 pattern | 上游 README 仍写「rc.3 及更新不支持」，与 release-notes 自相矛盾；本机仍是 rc.2，**没有实测** | 拿到 rc.5 安装包 → 解 `resources\app` 副本 → 离线跑 85 条，`drifted` 必须 0 | 用户 2026-11-02 明确「先不用管」 |
 | 9 | `node_modules\.ignored\` 新残留 | 每轮重装会堆一份 `dsh-purge.old-*`（约 5 MB） | 属 pnpm 行为，非故障 | 定期清理即可 | P3 |
+| 10 | `lib/index.js:840` 悬空调用 `rewind.wrapSessionDeriveMessages(session)` | `lib/rewind.js` 已无该导出（上游 `335ddee` 删的），运行时 TypeError 被 `try/catch` 静默吞掉 | **决定不修**：`lib/index.js` blob `4336a090` 与上游**完全相同**，是仅剩的零差异文件，为 3 行制造 DIFF 不值 | 等哪天因别的事改 `lib/index.js` 时一并删 | P4（默认不动） |
 
 > **不在此表里、但已确认不用跟的**：`skills/`、`test/`、`README*.md`、`default-prompt-inject`（外挂条款）、
 > `net-scope.js`（放行名单）、`install-paper-autopilot.mjs`、`package.json` 的 version/`files[]`/`dsh.install`。
@@ -369,3 +433,74 @@
 | `README.md` / `README.zh-CN.md` / `README.ja.md` | 上游改安装说明、新增日文版 | 纯文档，零运行影响 | 想同步就单独抄文案，不动代码 |
 
 **高发冲突三件套**：`lib/core.js`、`lib/net-scope.js`、`package.json` —— 每次 port 都会撞，撞了按上表处理，不要 `-X theirs`。
+
+---
+
+## 附录 H：1.1.71 基线包含性核查（2026-11-10，回答「mmparko 的 1.1.71 我们全都有吗」）
+
+> 基线：tag **`baseline-mmparko-1.1.71`**（= `033e6bd` = 1.1.71，mmparko 镜像末版）。
+> 血统：`git merge-base local baseline-mmparko-1.1.71` = `6c1d638` ⇒ **1.1.71 是我们的祖先线**。
+> 对照：`git merge-base local upstream-mirror` = **空**（上游 force-push 换过历史，无共同祖先）。
+> **结论：local 是 1.1.71 的严格超集。**
+
+### H.1 量化对照
+
+| 维度 | 1.1.71 | local（`cc36574`） | 判定 |
+|---|---|---|---|
+| 文件总数 | 109 | 203 | 只少 `MIRROR-NOTICE.md`（纯镜像说明，非功能） |
+| `lib/**/*.js` | 49 | 58 | — |
+| 总 diff | — | `144 files changed, +29649 −4061` | 代码目录 `lib+client.js+bin` = `50 files, +8837 −3604` |
+| 共同文件 | 108 个（内容相同 60 / 有差异 48） | — | — |
+| 红队工具 `redteam_*` | **56** | **64** | 只在 1.1.71 有 = **0** |
+| 补丁 id（`lib/core.js`） | **82**（1–88 缺 20/27/41/44/79/81） | **86** | 1.1.92 新增的 89/90/92/93 我们全含；双向差集 = 空 |
+| skills 文件数 | 23（全 `skills/redteam/*.md`） | **88**（redteam 24 + paper-autopilot 64） | `evidence-discipline.md` 只我们有 |
+| 面板标识词（`client.js` 引号内小写标识） | 490 | 509 | 只在 1.1.71 出现 = **0** |
+| `presets/redteam` | 3 件 | 3 件 | 完全一致 |
+| `package.json` scripts | `embed-prompt`, `build:client` | 同 + `postinstall`, `install:skill`, `test` | 无缺失 |
+| `package.json` 顶层字段 | — | 多 `dshTargets` | 无缺失；`dependencies` 双方均为空对象 |
+
+**local 多出的 8 个工具**：`redteam_evidence_{list,record,upgrade,verify}`、`redteam_unknown_{list,record,resolve}`、`redteam_unverified_count`。
+
+**local 多出的 20 个面板标识词**：chat、chip、cleanup、data-command-input、data-hide、dshp-flow-kind、dsh-purge-command-input、flash、group、home、locate、override、patch、pre-wrap、seed、start、uninstall、unresolved、visible。
+
+### H.2 唯一实质发现：8 个导出符号的缺失（全是上游自己删的）
+
+| 文件 | 缺失导出 | 1.1.71 里的调用点 |
+|---|---|---|
+| `lib/core.js` | `clientBundlePackageName` | 定义 `:5910` + 调用 `:7109`（在 `patchWatchedClientBundlesSync` 内） |
+| `lib/core.js` | `patchWatchedClientBundlesSync` | 定义 `:7089`，**无外部调用者** |
+| `lib/core.js` | `restoreMissingOriginalsAllHosts` | 定义 `:6009`，**无调用** |
+| `lib/rewind.js` | `cutSurfaceNodes` | 定义 `:226` + 内部使用 `:510` |
+| `lib/rewind.js` | `isRewindDerivedMessage` | 定义 `:219` + `:395` + `:490` |
+| `lib/rewind.js` | `wrapSessionDeriveMessages` | `lib/index.js:677` 调用 + `rewind.js:388` 定义 + `:554` 内部 |
+| `lib/identity.js` | `isMinimalSession` | 定义 `:507`，**无调用** |
+| `lib/identity.js` | `isRedteamSubagent` | 定义 `:603` + 调用 `:926` `const redteamChild = redteam && isRedteamSubagent(opts.context);` |
+
+**来源**：全部由上游 `335ddee`「fix: 全仓审计加固与死代码清理，版本 1.1.87」（本地 port `3523463`）删除。
+该提交 `48 files changed, +890 −1652`，同时删光 `test/**` 11 个测试文件
+（client-dark-theme、desktop-asar-swap、dsh-next、inject-wiring、ip-utils、patch-status 254 行、profile-insert 360 行、score-rules、settle-policy、web-reclaim、zip-extract）。
+⇒ **mmp=有 / up=无 / local=无**，我们跟了上游的清理，不是我们丢了东西。
+
+### H.3 这 8 个符号的能力去了哪（逐个确认无损失）
+
+| 原能力 | 1.1.71 实现 | local 现状 |
+|---|---|---|
+| 回退标记过滤 | monkey-patch `session.deriveMessages` | **下沉到宿主 `ConversationNodeAssembler` 层**：`lib/core.js:5327` 注入 `isRewindMarker(event)`、`:5443` 注入 `rewindVisibleEntries(entries)`、`:5518` 直接改 `case "user/message"` → `if (event.data?.id.indexOf("rewind-") === 0) return null; // [dsh-purge] rewind markers stay off the model transcript`。另 `lib/rewind.js:70` 仍留 `id.startsWith("rewind-")` |
+| 回退恢复 | `cutSurfaceNodes` 表面裁剪 | `createBlank` / `hideRewoundSource`（`lib/rewind.js` 内 5 处），走 `controller.create` + `registry.archiveSession` / `detachSession` |
+| 客户端 bundle 补丁 | `patchWatchedClientBundlesSync` + `clientBundlePackageName` | 上游 1.1.87 改用 `restoreMissingOriginalsFromBak`（`upstream-mirror:lib/core.js:6430` 定义、`:6589` 与 `:7647` 调用）；local `core.js` 里 client/renderer 相关 **9 处**命中 |
+| `redteamChild` 身份分流 | `redteam && isRedteamSubagent(context)` → 分身份渲染协议 | **唯一不等价点，但结果同构**：`lib/identity.js:1009` 与 `lib/index.js:499` 直接写 `redteamChild: false`；`lib/capability-protocol.js` 只剩 33 行、`capabilityProtocolText` 忽略该参数，注释原话「主智能体和子智能体同一份。红队调度正文仍在预设 ops 里，这里不按身份拆协议。」⇒ 少一次分身份换文案，无能力损失 |
+
+### H.4 门禁方向：1.1.71 比我们严得多
+
+| 项 | 1.1.71（lab-only default-deny） | local（只拦四类） |
+|---|---|---|
+| `DENIAL` 文案 | `"不行，这是严令禁止的"` | `"该目标在禁止范围内：中国大陆、香港、澳门，银行与金融站点，政府或军事站点。"` |
+| `permittedHost()` | 只做 `allow.exact.has(host)` | 优先级：`publicHostHit` 白名单放行 > `rangeHit`（32 条 RANGE_HOSTS）> `govHit` > 区域/银行 |
+| 政府/军事判定 | 无 `govHit` | 有 `GOV_LABELS` / `GOV_GO_TLDS` / `GOV_SUFFIXES` |
+| 靶场白名单 | 无 `RANGE_HOSTS` | 32 条 `RANGE_HOSTS` + `RANGE_SUFFIXES` |
+| 扫描宽容度 | `ATTACK_SCAN_CAP` 100 KB，单窗 | `ATTACK_SCAN_CAP` **256 KB**，`ATTACK_WINDOW=8192` 分窗扫描防 ReDoS |
+| 其他 | `allowDecision()` / `ownServerNote()` 空壳；`writeAllowText` 空壳 | IPv6 映射去重、localhost 识别、恢复真 `writeAllowText`、新增 `tools/pre-execute` 钩（`toolHook` / `isRedteamPayload` / `latestToolText` / `execArgText`）、`parkDenial` 支持 `step>=1` |
+
+⇒ 1.1.71 用户能打的靶，我们能打；反过来不成立。
+
+---
