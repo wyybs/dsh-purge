@@ -28,7 +28,7 @@
 - **动作：把末代基线钉成 tag**（`refs/remotes/*` 会被 `fetch --prune` 扫掉，tag 不会）：
   - `final-upstream-1.1.92` → `fc6e787`（1.1.92）
   - `baseline-mmparko-1.1.71` → `033e6bd`（mmparko 镜像末版 1.1.71）
-  - 两个 tag 都是 annotated，`^{commit}` 解引用已验证；**未 push**（等用户确认，见 §0.0.1 的复活流程）。
+  - 两个 tag 都是 annotated，`^{commit}` 解引用已验证；**已 push**（`889e8a5` 这一提交一并推上 `origin/local`）。
 - **协议变更**：`UPDATE-GUIDE.md` §0.0 第 3 步从「直接 fetch 上游」改为「**先探活两地址**」，
   新增 §0.0.1 专门写探测命令、判定表、复活后的额外动作。**用户要求每次读文档都探一次**（原话见下）。
   > 用户原话（m00224）：「然后记录下上游，就是我每次让你读文档的时候你也去上游访问下，看他们后续是否将仓库打开了。到时候如果打开了 就重新拉下来跟我们现在对比」
@@ -65,7 +65,7 @@
 
 **4. 本轮没做**
 
-- 没 push 两个新 tag（`local` 也没动）—— 等用户确认。
+- 没 push 两个新 tag —— **后续已在 `889e8a5` 一并推送**（`local` + 两个 tag 全部上远端）。
 - 没清 `refs/remotes/probe/mmparko-{master,archive}`（已用 `baseline-mmparko-1.1.71` 保住证据链，清不清都行）。
 - 没跑 `pnpm install`、没重启宿主、没碰 `app.asar`。
 
