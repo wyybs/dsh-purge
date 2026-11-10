@@ -8,6 +8,31 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-10 14:30 上线 `scripts/port/check-host.mjs`：一条命令跑完三段复验
+
+> 今天两小时里有一半时间耗在"状态页红了几条、到底真打上没有"。三种误报（旧壳拖红、定义域消失、
+> 半打补丁）都不是补丁漏了，是验证方法不够硬。把方法固化成脚本。
+
+```
+node scripts/port/check-host.mjs            # 自动找桌面安装，三段全跑
+node scripts/port/check-host.mjs --keep     # 保留解包目录
+node scripts/port/check-host.mjs --surface web
+```
+
+三段各自回答一个问题：
+
+| 段 | 做什么 | 判据 |
+|---|---|---|
+| **A 真机只读** | 对已解包的 `resources\app` 跑 `patchStatus`，自动带 `DSH_SURFACE=desktop` | `drifted` 必须为 0 |
+| **B 首轮** | 自动解 `app.asar`（**没有就退到 `app.asar.bak`**，解包后的宿主只有 bak 可用），对干净副本 `applyPatches` | `applied + already` 应等于全部可打条数 |
+| **B 次轮** | 同一副本再 `applyPatches` 一次 | `drifted` 必须为 0，且 `already` 等于首轮命中数 |
+
+第三条是重点：**首轮绿、次轮红 = 有补丁只打中一半**，rollup 的「applied 优先」会把它盖成绿（历史事故 `#17`）。
+
+其它约束写进脚本了：解包跳过 1583 个 `unpacked` 文件（补丁从不碰 native，省 250MB 和几分钟）；
+临时目录用 6 位随机短名（2 万文件的最深路径逼近 Windows 260 上限）；`rmSync` 带 10 次重试。
+没有 `app.asar` / `app.asar.bak` 时 B 段跳过，结论会明确写「部分通过 + 未执行哪段」，不会假报通过。
+
 ### 2026-11-10 13:58 0.2.2-rc.1 真机验收通过：68/70 applied，0 pending，0 drifted
 
 宿主 `D:\Program Files\DeepSeekRuntime` 装成 0.2.2-rc.1，插件自己解开 `app.asar`（213,202,918 字节 → `resources\app`），asar 改名 `.bak`，`/purge apply` 落地。
