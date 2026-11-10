@@ -8,6 +8,42 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-10 11:30 适配宿主 0.2.2-rc.1（分支 `feat/dsh-0.2.2-rc.1`）
+
+> 宿主发到 **0.2.2-rc.1**（安装包 `deepseek-harness-0.2.2-rc.1-win-x64.exe`，NSIS，内含 `app-64.7z`）。
+> 目标：**功能不缩窄**地在新版本可用，同时旧宿主（rc.2 / rc.5）行为零变化。
+
+**结论数据**（在安装包解出的干净 `app.asar` 副本上跑本插件自己的补丁引擎）：
+
+| 轮次 | applied | already | drifted | missing_file | skipped | na | 命中合计 |
+|---|---|---|---|---|---|---|---|
+| 改前 | 57 | 7 | **7** | 7 | 1 | 7 | 64 / 86 |
+| 改后 | 63 | 8 | **0** | 7 | 1 | 7 | **71 / 86** |
+| 改后二次 apply | 0 | 71 | **0** | 7 | 1 | 7 | 幂等 |
+
+**改动范围**（全部是"追加变体/追加文件键"，旧 pattern 一字未动）：
+
+1. `package.json`：`dshTargets` 追加 `0.2.2-rc.1`（`dshTarget` 主适配仍留 `0.2.1-rc.2`）。
+2. `lib/core.js` `targetFiles()`：
+   - `dsh-tools` / `dsh-tools-types` 追加 `lib/pipeline.js`、`lib/types/pipeline.js`（0.2.2 把审批决策拆出 `index.js`）；
+   - 新增 `dsh-tool-executor-ptc`、`dsh-tool-executor-ptc-types`（run_code 执行器独立成包）；
+   - `deliverables-prompt` 追加 `dsh-deliverable-file-references/lib/index.js`（静态交付物提示词搬到独立插件）。
+3. `lib/core.js` 补丁变体：
+   - **#14** 追加两条：`displayReason` 换成 `escalationDisplayReason(...)` 调用形态的 `request` 段；`switch` 四分支（rejected/cancelled/unavailable）统一放行。只改 request 不改 switch，用户点一次拒绝仍然堵死。
+   - **#40** 追加 0.2.2 变体：assemble 尾段把 `tools` 并进返回值、早退分支从 `return transformed;` 改为 `{ ...transformed, tools }`。**新变体必须带 `tools`**，否则这一轮模型没有任何工具。
+   - **#54 / #60 / #62** 靠新增文件键命中，补丁体不动。
+   - **#67** 追加 5-tab 变体（原文一字未改，只是下沉一层）。
+   - **#74** 追加新锚点 `claim + this.model.current()`（0.2.2 在 claim 与 assemble 之间插了模型选择与工具集解析）。
+   - **#17** 追加 `editIntent` 单行体变体 —— 这条是**两遍法才逼出来的**：0.2.2 把 `editIntent` 改成 `return this.requirePresent(...)`，旧 pattern 整段失配，而同一补丁的 `writeIntent` 仍命中，rollup「applied 优先」把它盖成绿，实际"编辑免读先写"这一半已死。
+
+**发现但未改（需要用户决策）**：
+
+- `@deepseek-ai/dsh-plugin-package-inventory-deepseek` 在 base bundle 里默认启用，官方 API 请求会带 `dsh_plugin_packages` 字段（活跃插件名+版本）。要关就在 `cordis.patch.yml` 加 `- id: plugin-package-inventory-deepseek` + `disabled: true`，代价是官方请求诊断少一项。
+- `lib/official-update.js` 的 `harnessExeName()` 只认 `dsh desktop.exe` / `dsh next.exe` / `deepseek harness.exe` / `deepseek-harness.exe`，**两个 rc 的 exe 都叫 `DeepSeekRuntime.exe`**，不在名单里 —— 官方升级后补丁被静默覆盖时，自动重打标记永远不会亮。属既有缺口，非 0.2.2 引入。
+- 7 条 `missing_file` 全是可选包：`#71/#28` 梁神预设、`#76` 自造 unrestricted 预设、`#30/#31/#64/#65` `dsh-hooks-claude-code` / `dsh-hooks-codex`。这两个 hooks 包在 0.2.2 里也不存在（宿主未内置），本机 profile 也未安装，属预期缺失。
+
+**验证方式**（可复现）：安装包 → `7z x ... $PLUGINSDIR/app-64.7z` → 解出 `resources/app.asar` → 本仓 `extract-asar` 逻辑解成目录 → 以 `…/dsh/node_modules/@deepseek-ai` 为 `aiBase` 跑两遍 `applyPatches(ALL_PATCHES)`，比对上面那张表。二次 apply 出现 `drifted` 就说明有补丁「只打中一半」。
+
 ### 2026-11-10 10:56 按「指南只放架构+判据」重排：快照全部移入附录 I
 
 > 用户指出：「我这个文档应该就记录架构和判据逻辑，为什么还记录这么多其他的东西？」
