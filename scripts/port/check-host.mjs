@@ -47,6 +47,14 @@ const KEEP = flag("keep");
 const WORK_ROOT = value("work", path.join(os.tmpdir(), "dpchk"));
 process.env.DSH_SURFACE ||= SURFACE;
 
+// 显式给了 --asar 却指错路径，是最容易被误读成"通过"的失败模式：B 段会跳过、
+// 结论写"部分通过"、退出码仍然是 0。这里直接当环境错误返回 2。
+const GIVEN_ASAR = value("asar", "");
+if (GIVEN_ASAR && !fs.existsSync(GIVEN_ASAR)) {
+  process.stdout.write(`错误：--asar 指定的文件不存在：${GIVEN_ASAR}\n`);
+  process.exit(2);
+}
+
 const log = (s = "") => process.stdout.write(`${s}\n`);
 
 // ---------------------------------------------------------------- 探测宿主
@@ -228,6 +236,11 @@ log("=".repeat(64));
 const roots = findInstallRoots(value("root", ""));
 const root = roots[0] || "";
 let asarPath = value("asar", "");
+
+if (roots.length > 1) {
+  log(`\n注意：找到 ${roots.length} 个疑似安装目录，默认用第一个。要换用 --root 指定：`);
+  for (const r of roots) log(`  ${r}`);
+}
 
 // 已解包的宿主会把 app.asar 改名成 app.asar.bak —— 那份 bak 才是原始归档，
 // B 段照样能跑。顺序：先找还封着的 asar，再退到 bak。
