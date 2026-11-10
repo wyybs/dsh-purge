@@ -24,6 +24,14 @@
   name: dsh-redteam-mode/ui
   disabled: true
 
+# 0.2.2 起 base bundle 默认插入这一行：走官方 DeepSeek API 时，请求体里会多一个
+# dsh_plugin_packages 字段（活跃插件包名 + 版本），本插件也在清单里。
+# 关掉只是不再上报这份清单，模型输出/工具/会话都不受影响；
+# pluginPackages 服务本身由 dsh-app-boot 提供，别处照常能拿到，不存在连带。
+- id: plugin-package-inventory-deepseek
+  name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
+  disabled: true
+
 - id: system-prompt
   config:
     includeHarnessIdentity: false
