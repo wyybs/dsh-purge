@@ -256,6 +256,10 @@ if (version) {
 // --- A. 真机只读复核
 log("\n[A] 真机只读复核 (patchStatus, surface=" + SURFACE + ")");
 const liveAiBase = root ? findAiBase(path.join(root, "resources", "app")) : "";
+const asarUnderRoot = root && asarPath && path.resolve(asarPath).toLowerCase().startsWith(path.resolve(root).toLowerCase());
+if (root && asarPath && !asarUnderRoot) {
+  log("  注：这验的是当前已安装的宿主；你 --asar 给的新包请看 B 段");
+}
 if (liveAiBase) {
   const status = await core.patchStatus(liveAiBase);
   const t = tally(status);
