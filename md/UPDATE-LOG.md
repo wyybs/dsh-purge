@@ -8,6 +8,98 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-10 10:56 按「指南只放架构+判据」重排：快照全部移入附录 I
+
+> 用户指出：「我这个文档应该就记录架构和判据逻辑，为什么还记录这么多其他的东西？」
+> 判断成立 —— 上一版（10:44 那次）虽然把**错的数字改成对的**，但**结构上仍然是一份体检报告**：
+> §0 有 24 行「期望值 | 现状」，一次 apply 或一次提交就有半张表过期。改对了数值，没改对**职能**。
+
+**这次动的不是数值，是分界**：
+
+| 类别 | 判据 | 放哪 |
+|---|---|---|
+| 结构判据 | 分支=`local`、`merge-base` 为空、`app.asar`=False、副本 `DIFF=0`、`allowBuilds` 恰好 2 行 | 指南 §0.A |
+| 阈值 | 64 工具 / `RANGE_HOSTS` 32 条 / `skills` 88 文件 —— 低于即收窄 | 指南 §1.5.1（保留） |
+| **快照** | HEAD、条数、`applied`、文件数、字节数、宿主 `FileVersion`、上游 `dshTarget` 读数、tag 清单 | **log 附录 I（新建）** |
+
+具体动作：
+
+- `UPDATE-GUIDE.md` §0 从「基线数值表」重写为 **§0.A 结构判据 / §0.B 快照怎么取 / §0.C 两层架构**，
+  一行读数都不留；核对方式变成「跑命令 → 与 log 附录 I 最后一条比对 → 不一致就报偏差并追加新快照」。
+- §0.1 文档边界新增**第 4 条「数值禁令」**：会变的数字禁止写进指南，只有结构常量与合格条件例外。
+- §0.5.2 上游支持矩阵从「某 rc 对应某版本 + 原话引用」改成**纯判据**（三处依据一致才算支持，两处打架按不支持），
+  读数与被引原话全部移 log 附录 I。
+- 流程正文里的读数一并判据化：§0.0 第 1 步、收尾表、§1.2.1 判定表、§5/§5.1 验证、§4.6.1 验收块、
+  §7.4（389,927 B → 「近 400KB」）、§8 摘要。
+- 事故复盘从指南挪走：§4.6.1 原来那张「三套脚本为什么全失败」4 行表 → 一句话 + 指向附录 D5；
+  §5.1 的「2026-10-28 修正」叙述 → 两行结论。
+- `UPDATE-LOG.md` 新建**附录 I「基线快照」**：表格式全量读数 + 结论行 + 三个折叠块（`port:` 18 条、`local:` 13 条、
+  现存 tag 全清单）—— 这些原来都塞在指南里。
+
+- 附带修掉两个**取数脚本自身的坑**（都会让「量出来的数」是错的）：
+  ① `git log --oneline --grep=… | Measure-Object` 在本机 pwsh 上**少报** —— `port:` 实际 18 条只数出 14 条、
+     `local:` 实际 13 条只数出 8 条 ⇒ 统一改用 `git rev-list --count --grep=…`；
+  ② 宿主目录名/可执行文件名里带空格，**手抄必漏**（我写这份文档时就被反复抹掉空格）⇒ 指南里不再出现该名字，
+     统一用 `Get-ChildItem` 枚举 + `<HOST_EXE>` / `<DSH_ROOT>` 占位符。
+
+**结果**：指南 1437 → 1435 行，**行数几乎没变，但性质变了** —— 删掉 24 行数值表、3 行事故表、约 20 处散落读数，
+换成 §0.A 判据表 + §0.B 取数脚本 + §0.5.2 判据块。**现在指南里没有任何一行会因为一次 apply 或一次提交而过期。**
+
+**没做**：代码零改动；未提交、未 push。
+
+---
+
+### 2026-11-10 10:44 文档全量审计：13 处数值/事实与仓库不一致，已按实测改齐
+
+> 起因：用户要求「读一遍 `UPDATE-GUIDE.md`，看还有哪些写的是错的」。
+> 做法：把文档里所有**可验证的断言**逐条跑命令核对（git/文件系统/CLI `--status`/上游 tag 内容），
+> 只改文档与 log，**代码零改动**。上游本轮复探仍 `exit 128`（两地址 404）。
+
+**实测对照（文档原值 → 实测值）**
+
+| 项 | 文档原值 | 实测值 |
+|---|---|---|
+| `local` HEAD | `cc36574` | `06d1f63`（`889e8a5`、`06d1f63` 是 11-10 10:27/10:28 新落的） |
+| `port:` 链 | 17 条 | **18 条**（清单本身列了 18 个，只是计数写错） |
+| `local:` 清单 | 11 条 | **13 条** |
+| 安装副本 MISSING | 14（5+9） | **17**（8 个白名单外 + 9 个 `test/`；多出的是 `md/` 三份，`md` 不在 `files[]`） |
+| `resources\app` 文件数 | 18367 | **18,370** |
+| 补丁条数 | 82（§1.4 / §2） | **86**（`core.js` 里 86 个 `id:`） |
+| `lib/core.js` 体积 | 342KB | **389,927 B ≈ 381KB** |
+| 上游 `dshTarget` | `0.2.1-rc.2` | **`0.2.1-rc.5`**（`2d428b1` / v1.1.91 起；`dshTargets` = [rc.5, rc.2]） |
+| 上游 README 兼容声明 | `1.1.81 targets …`（L60/L136-139） | **`1.1.90 targets DSH 0.2.1-rc.2`**（L81 / L156-159） |
+| applied 判据 | 61 / 77 / 66 三套 | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file** |
+| `readPurgeTarball()` | 当成现存写死点（§4.1.2 / §7.15） | **全仓不存在**，只出现在文档里 |
+| `lib/update.js` `gitResetTo` | `:861` | **`:860`** |
+
+**判定层面的三处修正（不只是数字）**
+
+- **`dshTarget` 已经变过一次**：上游 1.1.91 把目标改成 `rc.5`，但 README 仍写 rc.3+ 不支持 ⇒ 现状就是「三处依据打架」。
+  原文档「等 `dshTarget` 变成 rc.3 才算支持」的判据已失效（它早变了），§0.5.3 改成「当前即矛盾 → 按不支持处理，
+  只有 README 改口才算支持」。结论没变（**仍不许升 DSH**），依据换了。
+- **blob 一票否决失效**：`local:lib/core.js`(`a07c4b6`) vs `upstream-mirror:lib/core.js`(`db251d7`) **永远不等**
+  —— 因为 `core.js` 里有我方两处 fork 修正（`insertProbe` ×2、`rollupPatchStatus` 已写入优先，共 16 行）。
+  判据改为「上游上一版 vs 本次」两个 ref 比，见 §1.2.4 / §1.5 ①。
+- **写死地址判据自相矛盾**：§1.5.1 要求 `git grep YuJunZhiXue -- lib client.js` 为空，但 §4.1.2 又要求 `update.js:12` 保留。
+  改成白名单式 grep（5 处允许：`update.js:12`、`redteam/ui.js:360`、`client.js:143/501`、+ `package.json` 元数据三行），
+  判据命令输出必须为空。
+
+**其他修正**
+
+- 宿主目录名那段的**诊断是错的**：不是「带空格导致 `Test-Path` 假报 False」，而是手抄时把 `DeepSeekRuntime` 中间那个空格漏了。
+  实测 `Test-Path 'D:\Program Files\DeepSeekRuntime\resources\app'` = `True`。已改成「照抄/枚举，别漏空格」。
+- 「rc.3 之后 `resources\app` 解包目录不存在」→ 改为「只有 apply 解包后才有；本机 rc.2 一直有 18,370 文件，
+  §0 的 CLI 正是靠它跑」。
+- `lib/local/<模块>.js` 这个目录**不存在**（`lib/` 是平铺的）；§7.4 改成「新功能放 `lib/` 下新文件，
+  fork 修正必须带注释 + 登记附录 G」。
+- `$src='$SRC'` 单引号不做展开、`<新地址>` 直接粘进 pwsh 会被当重定向 —— 顶部占位符说明补了两条替换纪律。
+- 汇报模板「统一五列」→ 六列（表头本来就六列）；模板示例 `local @ 5f7bbc2` / 「port 链 5 条」→ `06d1f63` / 「18 条」。
+
+**没做**：没改任何 `.js`；没提交、没 push（等用户点头）；`local` 工作区除本文档与 `UPDATE-GUIDE.md` 外无改动。
+
+---
+
+
 ### 2026-11-10 10:20 上游消失定案 + 1.1.71 包含性核查 + `app-update.yml` 掐断
 
 > 本轮起因：经代理重测上游，确认**不是网络问题、是仓库真没了**。顺带做了三件事（改名、钉基线、写核查）。
@@ -502,5 +594,78 @@
 | 其他 | `allowDecision()` / `ownServerNote()` 空壳；`writeAllowText` 空壳 | IPv6 映射去重、localhost 识别、恢复真 `writeAllowText`、新增 `tools/pre-execute` 钩（`toolHook` / `isRedteamPayload` / `latestToolText` / `execArgText`）、`parkDenial` 支持 `step>=1` |
 
 ⇒ 1.1.71 用户能打的靶，我们能打；反过来不成立。
+
+---
+
+## 附录 I. 基线快照（**所有「会变的数字」只准放这里**）
+
+> `UPDATE-GUIDE.md` 只写判据与流程，**不写读数**。凡 HEAD、文件数、`applied` 数、条数、字节数、宿主 `FileVersion`、
+> 上游 `dshTarget` 读数、tag 清单 —— 一律记在这一节。
+> 规则：**每次巡检/每次 apply 后追加一段**（新→旧），不修改历史段；`UPDATE-GUIDE.md` §0.B 有取数脚本。
+
+### 2026-11-10 10:44（文档审计那一轮，巡检实拍）
+
+| 项 | 值 | 取法 |
+|---|---|---|
+| `local` HEAD | `06d1f63` | `git rev-parse --short local` |
+| `origin/local` | 同点（已 push） | 同上 |
+| 工作区 | clean | `git status --porcelain` |
+| `port:` 链 | **18 条** | `git log --grep='^port:' local` |
+| `local:` 链 | **13 条** | `git log --grep='^local:' local` |
+| 补丁 id 总数 | **86** | `grep -cE '^\s+id: [0-9]+' lib/core.js` |
+| 补丁状态（CLI，patch id 口径） | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file**，`drifted=0` | `bin/dsh-purge.js --status` |
+| 补丁状态（HTTP，rollup 口径） | `applied=68 / ready=70 / na=6 / skipped=2`（仅展示） | `/dsh-purge/status` |
+| 预期异常项 | `#80` skipped（无 minimal 预设）、`#71` missing_file（无「梁神」预设） | `--status` 明细 |
+| 宿主版本 | `0.2.1-rc.2` | `DeepSeekRuntime.exe` FileVersion |
+| `app.asar` | False（`app.asar.bak` 182,794,869 B） | `Test-Path` |
+| `app-update.yml` | False（`.disabled` 306 B，`channel: nightly`） | `Test-Path` |
+| `resources\app` | 18,370 文件 / 416.3 MB | `Get-ChildItem -Recurse` |
+| 安装副本 | 189 文件；`skills` 88；**DIFF=0**；**MISSING 17**（8 白名单外 + 9 `test/`） | §1.3 D 脚本 |
+| `allowBuilds` | 2 行（裸名 + `"dsh-purge@file:D:/…/src"`） | `pnpm-workspace.yaml` |
+| 源码 / 副本 `version` | `1.1.73` / `1.1.73` | `package.json` |
+| 本机 `dshTarget` | `0.2.1-rc.2`（`src/package.json:99`，有意保留） | `git grep '"dshTarget"'` |
+| 上游 `dshTarget` | **`0.2.1-rc.5`**，`dshTargets` = [`0.2.1-rc.5`, `0.2.1-rc.2`]（1.1.91 的 `2d428b1` 起） | `git show final-upstream-1.1.92:package.json` |
+| 上游 README 声明 | `1.1.90 targets DSH 0.2.1-rc.2`；`rc.3 and newer are not supported`（L81 / L156-159） | `git show final-upstream-1.1.92:README.md` |
+| 上游死活 | 两地址 `exit 128 Repository not found` | §0.0.1 探活 |
+| 上游末代 | `fc6e787` = 1.1.92（2026-11-06 01:04），tag `final-upstream-1.1.92` | `git log -1 fc6e787` |
+
+**结论行**：三处依据打架（`dshTarget` = rc.5 vs README 仍写 not-supported）⇒ **本机不升 DSH**，维持 rc.2。
+
+<details>
+<summary>展开：`port:` 链逐条（18 条，底→顶）</summary>
+
+`6667999`（seal schema / 6cb2ac3）→ `a6786ee`（#108 / 5d4b45c）→ `becd6aa`（#157 #154 #155 / 671011a）→
+`a114362`（#162 #159 / af7cd22）→ `5f7bbc2`（1.1.79 / 24f4a7f）→ `1f0727f`（1.1.80 / 9a8e848）→
+`b14e956`（DSH NEXT + 单测 / a0005ac）→ `b124add`（1.1.81 notes / 160b911）→ `c7ab58e`（1.1.82 #180 / 0c933dc）→
+`115de05`（1.1.86 / 1bdf239）→ `b771e39`（补回 web-preflight-entry）→ `3523463`（1.1.87 / 335ddee）→
+`a162c8f`（1.1.88 / d1eff01）→ `1ed1662`（补 1.1.86/1.1.83 漏移植）→ `feb9c06`（1.1.89 pattern 幂等 + 桌面退出留痕）→
+`3770ade`（1.1.91 原子写保权限）→ `ea19c45`（1.1.91 pnpm12 来源键）→ `862fdb0`（1.1.91 靶场门禁放宽 = 32 条白名单）
+
+</details>
+
+<details>
+<summary>展开：`local:` 链逐条（13 条）</summary>
+
+`d246244`（安装源→wyybs）· `efcc00c`（`files[]` 加 `skills` + `install:skill`）· `0f7ba6c`（修 `allowBuilds` 冒号截断）·
+`e499e03`（兼容 pnpm 11.28.5）· `6e60e01`（文档迁入 `src\md`）· `ec1886a`（脱敏）· `3d52095`（附录 F）·
+`082b157`（附录 G）· `ce5fad4`（面板 `own.hint` 同步 1.1.91 门禁）· `eb1af34`（修 #92/#93 二次 apply 叠加 + 来源键收紧）·
+`cc36574`（文档基线同步 1.1.92-port）· `889e8a5`（上游消失定案 + `app-update.yml` 掐断 + 巡检加探活）·
+`06d1f63`（补记 tag 已 push）
+
+</details>
+
+<details>
+<summary>展开：现存 tag（回滚点与基线）</summary>
+
+`v1.1.73` · `v1.1.73-wyybs` · `v1.1.73-wyybs-port1`（=6667999）· `-port2`（=5f7bbc2）· `v1.1.81-wyybs-port3`（=efcc00c）·
+`…-port3.1`（=0f7ba6c）· `v1.1.82-wyybs-port4`（=c7ab58e）· `pre-port-20261027` · `pre-rc3-rescue-20261027` ·
+`pre-port-1.1.86-20261101` · `pre-port-1.1.88-20261102` · `rc2-freeze-20261106` · `pre-update-20261106-133222` ·
+`upstream-mirror-backup-20261029` · `upstream-mirror-backup-20261106` · `upstream-snapshot-20261023-ca848d7` ·
+`…-ba12c91` · `…-20261027-24f4a7f` · `…-20261028-160b911` · `…-20261029-0c933dc` · `…-20261101-1bdf239` ·
+`…-20261102-d1eff01` · `…-20261106-fc6e787` · `final-upstream-1.1.92` · `baseline-mmparko-1.1.71`
+
+</details>
+
+
 
 ---

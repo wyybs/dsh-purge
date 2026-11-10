@@ -3,7 +3,11 @@
 > **位置与路径口径（2026-11-02 起）**：本文件在 **`src\md\`**，与 `FORK-GUIDE.md`、`UPDATE-LOG.md` 同级；
 > 文中 `md\X.md` 一律指 `src\md\X.md`（**路径以 `src\` 为根**）。
 > **占位符**（脱敏，换机器只需替换这四个，正文不再出现本机绝对路径）：
-> `$WS` = 工作区根 · `$SRC` = `$WS\src`（插件包根 / git 仓库） · `<DSH_ROOT>` = DSH 安装目录（`…\Program Files\DeepSeek…`，**名字带空格**） · `<USERPROFILE>` = 当前用户目录。
+> `$WS` = 工作区根 · `$SRC` = `$WS\src`（插件包根 / git 仓库） · `<DSH_ROOT>` = DSH 安装目录（`…\Program Files\<安装目录>`，**目录名与可执行文件名里都带空格，必须枚举取，别手抄**，见 §0.B） · `<USERPROFILE>` = 当前用户目录。
+> `<HOST_EXE>` = 宿主主程序文件名（与目录名同名 + `.exe`，同样带空格，取自 §0.B 的枚举结果）。
+>
+> 两条替换纪律：① 代码里的 `$src='$SRC'` 是**字面替换**（单引号不做变量展开）——把 `$SRC` 三个字母换成真实路径，别理解成「引用环境变量」；
+> ② 所有 `<…>` / `…` 占位符必须**整段替换成实际值再跑**，尤其像 `git remote set-url upstream __NEW_URL__` 这种位置，直接照抄会语法报错。
 
 > **读这份文档的助手请注意 —— 这是硬性流程，不是建议：**
 >
@@ -36,17 +40,17 @@
 
 | # | 动作 | 依据 / 命令 | 说明 |
 |---|---|---|---|
-| 1 | **基线核对** | §0 表逐项：git 状态、HEAD `cc36574`、副本 189 文件 / `skills` 88、`allowBuilds` 2 行、`/dsh-purge/status` = 78/0/6/86、`app.asar` = False、`app-update.yml` = False、tag `final-upstream-1.1.92` 在 | 有偏差先记下来，**仍然继续走完**，最后单列「基线异常」 |
+| 1 | **基线核对** | §0.A 结构判据逐项跑命令（分支 / 工作区 / 副本 `DIFF=0` / `app.asar`=False / `app-update.yml`=False / `allowBuilds` 2 行 + §0.B 取快照），再跟 **`UPDATE-LOG.md` 附录 I 最后一条快照**比 | 有偏差先记下来，**仍然继续走完**，最后单列「基线异常」，并**顺手往 log 追加一条新快照**。⚠️ 判基线只认 CLI `--status` 的 patch id 口径；GUI 的 `/dsh-purge/status` 是 rollup 口径，只作展示 |
 | 2 | **宿主闸门** | §0.5.3 三证据（`dshTarget` / README 矩阵 / release-notes） | 不支持就明写「**不能升 DSH**」并给原话依据 |
 | 3 | **探测上游死活** | §0.0.1 的两地址探测（`YuJunZhiXue` + `HunYiSage`，**必须先跑，不许直接 fetch**） | 上游 2026-11-06 起已消失；探测结果要写进汇报，见 §0.0.1 表 |
 | 4 | **拉上游 / 复用镜像** | 探测可达 → `git -C $src fetch upstream --tags --prune`；**不可达 → 跳过 fetch，直接用 `final-upstream-1.1.92` 标签当 `BASE_REF`** | fetch 128 不是故障，是既定状态；别拿旧数据冒充「上游没动静」 |
 | 4b | **对齐镜像 / 探测复活** | §1.1：能 ff 就 ff；不能 ff 就先打 `upstream-mirror-backup-<日期>` tag 再 `branch -f` 并 push。**上游复活时**才做这一步 | **只动 `upstream-mirror`，绝不动 `local`** |
-| 5 | **算差异** | `git diff --stat local upstream-mirror`；`lib/core.js` / `update.js` / `index.js` 的 blob；§1.5 ② `RANGE_HOSTS` 条目数；`git ls-tree -r --name-only upstream-mirror -- skills` 文件数；`git grep -n 'YuJunZhiXue'` | 数字要写实测值，不要写「看起来没变」 |
+| 5 | **算差异** | `git diff --stat local upstream-mirror`；`lib/core.js` / `update.js` / `index.js` 的 blob（**比「上游上一版 vs 本次」，见 §1.2.4**）；§1.5 ② `RANGE_HOSTS` 条目数；`git ls-tree -r --name-only upstream-mirror -- skills` 文件数；§4.1.2 的白名单式 `git grep 'YuJunZhiXue'` | 数字要写实测值，不要写「看起来没变」 |
 | 6 | **判性质** | 逐提交按 §1.2.3 打标：**增强 / 修复 / 适配 / 收窄 / 删除 / 文档**；用 §1.5.1 能力基线量收窄；**先翻 `UPDATE-LOG.md` 附录 B（已判定不跟清单），别重复提案** | 收窄、删除一律标「**不跟**」，并写清「砍了什么、我们丢了什么能力」 |
 | 7 | **汇报** | 按 §2 模板：差异总览 + 性质分布 + 分组清单（含「性质」列）+ 每条给「跟 / 不跟 / 建议」+ 最后 A~E 选项 | 不许只贴文件列表；不许省掉「不跟」的项目 |
 | 8 | **等指令** | 未收到明确「更新 / 跟 / 执行」前，**一个字节都不改**（§0 顶部的硬性流程） | 用户说「全部更新」才是全部；说「只跟 X」就只动 X |
 
-### 0.0.1 🔭 上游死活探测（**每次巡检必跑第 3 步，2026-11-10 起新增**）
+### 0.0.1 🔭 上游死活探测（**每次巡检必跑的第 3 步**）
 
 **背景（2026-11-10 实测）**：原作者 `YuJunZhiXue/dsh-purge` 与其新马甲 `HunYiSage/dsh-purge`
 经本机代理（`127.0.0.1:7890`）实测 **双双 404**（`git ls-remote` exit 128 `Repository not found`），
@@ -81,12 +85,15 @@ foreach($u in @(
 **复活后的额外动作**（一次性，别漏）：
 
 ```powershell
-$src='$SRC'
-git -C $src remote set-url upstream <新地址>
+$src='$SRC'                                    # ← 字面替换成真实路径
+git -C $src remote set-url upstream '__NEW_URL__'   # ← 换成探测到的新地址；占位符必须整段替换
 git -C $src fetch upstream --tags --prune
 git -C $src tag -f final-upstream-1.1.92 fc6e787   # 旧末代基线保留，别删
 git -C $src tag ("upstream-revived-" + (Get-Date -Format 'yyyyMMdd')) upstream/master
 ```
+
+> ⚠️ 本节和 §4.1/§4.2 里出现的 `<新地址>`、`<目标 ref…>`、`<4.0 里的 stamp>` 都是**给人看的占位提示**，
+> 不是可直接执行的 PowerShell —— 保留尖括号直接粘进终端会被当成重定向。替换完再跑。
 
 > **顺手扩展侦察（可选，成本很低）**：GitHub 搜索常能发现同类马甲/接盘仓库，
 > 复活线索往往先出现在这里 —— `Invoke-RestMethod 'https://api.github.com/search/repositories?q=dsh-purge+in:name&sort=updated&per_page=20'`。
@@ -97,14 +104,14 @@ git -C $src tag ("upstream-revived-" + (Get-Date -Format 'yyyyMMdd')) upstream/m
 > 只有 `Could not resolve host` / `Connection timed out` / `Failed to connect` 才叫网络问题。
 > 别把「404」误报成「我这边网不通，查不了」。
 
-**三种收尾，只许选一种：**
+**三种收尾，只许选一种**（汇报里当然要给实测值 —— 那是「这一轮的读数」，取自 §0.B，**别回写进正文**）：
 
 | 情况 | 必须这样回 |
 |---|---|
-| 基线全绿、上游仍 404 | 一句话结论 + 实测值：「基线全绿（78/0/6/86、副本 189/88、asar=False、`app-update.yml`=disabled），上游两地址仍 404，末代基线 `final-upstream-1.1.92`=`fc6e787`，**无新提交可跟**。」 |
-| 基线全绿、上游无新提交 | 一句话结论 + 实测值：「基线全绿（78/0/6/86、副本 189/88、asar=False），上游仍是 `<sha>`（`<版本>`），**无新提交**。」 |
+| 基线全绿、上游仍 404 | 一句话结论 + 本轮读数：「基线全绿（CLI patch id 口径 applied=满值、pending=0、drifted=0；副本 `DIFF=0` 且 MISSING 只在白名单内；asar=False、update.yml=disabled），上游两地址仍 404，末代基线 `final-upstream-1.1.92`，**无新提交可跟**。」 |
+| 基线全绿、上游无新提交 | 一句话结论 + 本轮读数：「基线全绿（同上口径），上游仍是 `<sha>`（`<版本>`），**无新提交**。」 |
 | 有新提交 | 走完第 5–7 步，把「该跟 / 不该跟」分两栏列清，最后给 A~E 选项等圈定 |
-| 基线有偏差 | **先讲异常**（哪一项、期望值、实测值、会导致什么），再讲上游差异；未修好之前不建议动上游 |
+| 基线有偏差 | **先讲异常**（哪一项、判据要求、实测值、会导致什么），再讲上游差异；未修好之前不建议动上游，并顺手往 log 追加一条快照 |
 
 **明确禁止**：
 - 只回「已阅读」「看完了」这种空话；
@@ -122,103 +129,117 @@ git -C $src tag ("upstream-revived-" + (Get-Date -Format 'yyyyMMdd')) upstream/m
 
 | 内容 | 去哪 |
 |---|---|
-| 下次还要执行的**动作 / 命令 / 判据 / 模板 / 清单** | **本文件** |
-| 某天发生了什么、实测数值、移植明细、事故复盘、已判定「不跟」的上游提交 | **`UPDATE-LOG.md`**（append-only） |
+| 下次还要执行的**动作 / 命令 / 判据 / 阈值 / 模板 / 清单** | **本文件** |
+| 某天发生了什么、**任何会随一次 apply / 一次提交而变化的数值**、移植明细、事故复盘、已判定「不跟」的上游提交 | **`UPDATE-LOG.md`**（append-only），数值统一进**附录 I「基线快照」** |
 
-三条写作约束：
+四条写作约束：
 
-1. **入口自问**：这是「下次还要执行的动作」吗？是 → 本文件；这是「某天发生过的事」吗？→ log。
+1. **入口自问**：这是「下次还要执行的动作 / 判据」吗？是 → 本文件；这是「某天发生过的事」或「今天量出来是多少」吗？→ log。
 2. **单行原则**：本文件里任何背景说明**最多一行**，超了就写进 log，这里只留「见 `UPDATE-LOG.md` 附录 X」。
 3. **巡检不改正文**：每次体检/移植的结论只往 log 追加一节；只有**规范本身变了**才动本文件。
+4. **数值禁令（2026-11-10 新增，血泪）**：本文件**不许出现会变的数字** —— HEAD SHA、`applied` 数、文件数、字节数、
+   条数、宿主 `FileVersion`、上游 `dshTarget` 读数、tag 清单，全部只写在 log 附录 I。
+   允许留在正文的只有两类：**结构常量**（86 个 patch id、64 个工具、`RANGE_HOSTS` 32 条、`skills` 88 文件 ——
+   它们定义「低于这个就是收窄」，是判据阈值）和**合格条件**（`= False` / `DIFF=0` / `pending=0` / `merge-base` 为空）。
+   > 教训：数字写进指南的那一刻就开始腐烂 —— 上一版把 20 多行快照写进 §0，两周内十几处过期，巡检天天误报。
 
 ---
 
-## 0. 本机基线（2026-10-29 重构）
+## 0. 基线核对（**只写「怎么量」，不写「量出来多少」**）
 
-读这份文档时，先用下面的值核对现场。**任何一项不符就先报告偏差**；
-巡检本身继续走完（见 §0.0 第 1 步），但**不要带着基线异常进入执行阶段**。
+本节回答两个问题：**核对哪些项、合格长什么样**。**具体数值一律不写在这里** ——
+HEAD、文件数、applied 数、tag 清单、宿主版本这些每 apply 一次或每提交一次就会变的东西，
+全部记在 `UPDATE-LOG.md` **附录 I「基线快照」**（按日期，新→旧）。
 
-> **历史沿革（rc.3 事故、杀软导致 `spawn EPERM`、每次验收的实测值）全部在 `md\UPDATE-LOG.md`。**
-> 这里只留一条硬结论：**补丁层现在是生效态**（78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file，共 86，`drifted=0`），
-> `app.asar` 与 `app-update.yml` 均已改名，**上游已消失（两地址 404），末代基线 = tag `final-upstream-1.1.92`（`fc6e787` = 1.1.92）**。
-> 上游从 1.1.82 起就是「净化线」（`skills/` 清空、`RANGE_HOSTS` 0、`permittedHost` 恒 false），
-> 所以**永远不要**用 `git checkout upstream-mirror -- <目录>` 整目录同步，只能按 §1.2.3 逐 hunk 取。
+三类判据，别混：
 
-| 项 | 期望值 | 现状（巡检时核对） |
+| 类型 | 例子 | 会不会变 | 写在哪 |
+|---|---|---|---|
+| **结构判据** | 分支是 `local`、`merge-base` 为空、`app.asar` = False、副本 `DIFF=0` | 不变（架构决定的） | **本节** |
+| **阈值** | 红队 64 工具、`RANGE_HOSTS` 32 条、`skills` 88 文件 —— 低于它就是收窄 | 只在有人主动砍能力时才变 | **本节**（§1.5.1） |
+| **快照** | HEAD SHA、`applied` 数、副本文件数、`resources\app` 文件数、宿主 `FileVersion`、上游 `dshTarget` 读数 | 天天变 | **log 附录 I** |
+
+> 巡检时：跑本节命令 → 拿实测值跟 **log 附录 I 最后一条快照**比 → 不一致就是「基线偏差」，
+> 报告偏差并**顺手往 log 追加一条新快照**（不回来改本节）。
+
+### 0.A 结构判据（这些不合就是坏了，与数值无关）
+
+| 项 | 怎么量 | 合格 |
 |---|---|---|
-| 源码目录 | `$SRC` | ✓ |
-| 当前分支 | `local` | ✓ |
-| 当前 HEAD | `cc36574`（`local: 文档基线同步到 1.1.92-port`） | ✓ 已 push，`origin/local` = `cc36574`；工作区 clean |
-| port 移植链（底→顶） | `6667999`（seal schema / 6cb2ac3）→ `a6786ee`（#108 / 5d4b45c）→ `becd6aa`（#157 #154 #155 / 671011a）→ `a114362`（#162 #159 / af7cd22）→ `5f7bbc2`（1.1.79 / 24f4a7f）→ `1f0727f`（1.1.80 / 9a8e848）→ `b14e956`（DSH NEXT + 单测 / a0005ac）→ `b124add`（1.1.81 notes / 160b911）→ `c7ab58e`（1.1.82 #180 / 0c933dc）→ `115de05`（1.1.86 / 1bdf239）→ `b771e39`（补回 web-preflight-entry）→ `3523463`（1.1.87 / 335ddee）→ `a162c8f`（1.1.88 / d1eff01）→ `1ed1662`（补 1.1.86/1.1.83 漏移植）→ `feb9c06`（1.1.89 pattern 幂等 + 桌面退出留痕）→ `3770ade`（1.1.91 原子写保权限）→ `ea19c45`（1.1.91 pnpm12 来源键）→ `862fdb0`（1.1.91 靶场门禁放宽 = 32 条白名单） | ✓ **17 条**（最新 2026-11-06） |
-| `local:` 定制清单 | `git -C $src log --oneline --grep='^local:' local` | ✓ **11 条**：`d246244`（安装源→wyybs）、`efcc00c`（`files[]` 加 `skills` + `install:skill`）、`0f7ba6c`（修 `allowBuilds` 冒号截断）、`e499e03`（兼容 pnpm 11.28.5）、`6e60e01`（文档迁入 `src\md`）、`ec1886a`（脱敏）、`3d52095`（附录 F）、`082b157`（附录 G）、`ce5fad4`（面板 `own.hint` 同步 1.1.91 门禁）、`eb1af34`（修 #92/#93 二次 apply 叠加 + 来源键收紧）、`cc36574`（文档基线同步 1.1.92-port） |
-| 远端 `origin` | `https://github.com/wyybs/dsh-purge.git`（`local` = 活分支；`master` `4c98517` 存档；`upstream-mirror` `fc6e787`） | ✓ |
-| 远端 `upstream` | `https://github.com/YuJunZhiXue/dsh-purge.git` —— **2026-11-10 起 404（`Repository not found`），上游已消失**；原 `dshTarget` = `0.2.1-rc.2`、`dshTargets` = [`0.2.1-rc.2`, `0.2.1-rc.5`] | ✗ **不可 fetch**；迁址后的 `HunYiSage/dsh-purge` 同样 404。末代提交 `fc6e787`（1.1.92），已钉 tag `final-upstream-1.1.92`；每次巡检按 §0.0.1 复探 |
-| **上游镜像分支** | **`upstream-mirror`** = `fc6e787`（= 1.1.92 = 末代上游）；**已冻结，不再跟随** | ✓ 与 tag `final-upstream-1.1.92`、`upstream-snapshot-20261106-fc6e787` 同点，已 push |
-| 上游快照 tag | `upstream-snapshot-20261023-ca848d7`、`…-ba12c91`、`…-20261027-24f4a7f`、`…-20261028-160b911`、`upstream-snapshot-20261029-0c933dc`、`upstream-mirror-backup-20261029`、`upstream-snapshot-20261106-fc6e787`、`upstream-mirror-backup-20261106`、**`final-upstream-1.1.92`**、`baseline-mmparko-1.1.71` | ✓ 全部已 push |
-| 上游与 fork 关系 | **无共同祖先**（`merge-base` 为空） | ✓ `git merge-base local upstream-mirror` = 空（上游 force-push 换过历史）；但 `local ⊇ mmparko 1.1.71`，`merge-base local baseline-mmparko-1.1.71` = `6c1d638` |
-| 宿主依赖 | `<USERPROFILE>\.dsh\profiles\desktop\package.json` → `"dsh-purge": "file:$SRC"` | ✓（`dsh.profile.bundles` 7 项含 `dsh-purge`；`cordis.patch.yml` L25-26 有本体 insert） |
-| 安装副本 | `<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge`，**189 文件**，逐文件比对 **DIFF=0**、MISSING 14（5 个打包白名单外 + 9 个 `test/`），**独立拷贝**（`LinkType` 为空） | ✓ 含 `skills\`（88 文件）、`lib\anchor.js`、`lib\bin-preflight.js`、`lib\subagent-control.js`、`lib\web-reclaim.js` |
-| `pnpm-workspace.yaml` | `allowBuilds:` **2 行**：裸包名 `dsh-purge` + `"dsh-purge@file:D:/…/src"`（含 `:` 的键必须双引号；`e499e03` 起由插件自动维护并自愈） | ✓ L14-15 实测两行；**旧的「3 行含 tarball URL」写法已废弃**（`https://` 键会被 pnpm 11 当版本联合解析） |
-| 版本号 | `src/package.json` 保持 `1.1.73`（**永不改 version 字段**）；末代上游是 **1.1.92** | ✓ 源码与副本都是 1.1.73 |
-| tag | `v1.1.73`、`v1.1.73-wyybs`、`v1.1.73-wyybs-port1`（=6667999）、`-port2`（=5f7bbc2）、`v1.1.81-wyybs-port3`（=efcc00c）、`…-port3.1`（=0f7ba6c）、`v1.1.82-wyybs-port4`（=c7ab58e）、`pre-port-20261027`、`pre-rc3-rescue-20261027`、`rc2-freeze-20261106`、`pre-update-20261106-133222`、`upstream-mirror-backup-*`、`upstream-snapshot-*`、**`final-upstream-1.1.92`**、**`baseline-mmparko-1.1.71`** | ✓ 全部已 push |
-| **`app.asar`** | **必须是 False**（已改名为 `app.asar.bak`） | ✓ `False`；`app.asar.bak` = True（182,794,869 B）；`resources\app` = True（18367 文件 / 416.3 MB） |
-| **`app-update.yml`** | **必须是 `.disabled`**（掐断 nightly 自动更新；**插件自己的 `autoUpdateIfNeeded()` 管不到宿主 Electron**） | ✓ 2026-11-10 已实测改名：`app-update.yml` = False、`app-update.yml.disabled` = True（306 B）。内容 `channel: nightly`、`url: https://download.deepseek.com/dsh-desk/feeds/win-x64/` |
-| **补丁状态** | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86 条）**；`drifted = 0`、无 `errors.log` | ✓ `/dsh-purge/status` 实测 `patches_applied=68 / ready=70 / na=6 / skipped=2 / drifted=0`（rollup 口径），`patch_status` 明细 `applied 78 / na 6 / missing_file 1 / skipped 1`（patch id 口径）—— 两套口径别混；`#80` skipped、`#71 missing_file` 均属预期 |
-| **宿主** | **0.2.1-rc.2**（rc.3 起不来 → 用户手动降级）；`app-update.yml` 已改名 `.disabled` 掐断 nightly | ✓ `FileVersion` = 0.2.1-rc.2；GUI 端口每次重启都换 |
-| **本会话 shell** | `pwsh` 可用（§0 顶部：EPERM 是杀软导致，已解决） | ✓ 全部命令可跑 |
-| **DSH 支持矩阵** | 上游 `dshTarget` 仍 `0.2.1-rc.2`；1.1.88 起 `dshTargets` 声明接受 **rc.2 + rc.5**，但 **README 仍写 rc.3 及更新不支持**（声明自相矛盾） | ✓ `dshTarget`=`0.2.1-rc.2`；rc.5 属「上游自称支持、README 未改口」，**需本机离线实测后才写进文档** |
-| **能不能升 DSH** | **rc.2 不动；rc.5 未经实测不升** | ✗ 见 §0.5 —— 升 rc.5 前先按 §1.2 的离线比对法，在 rc.5 的 `resources\app` 副本上跑一遍 86 条，drifted 必须为 0 |
+| 当前分支 | `git -C $src branch --show-current` | `local` |
+| 工作区 | `git -C $src status --porcelain` | 空 |
+| `local` 与远端同步 | `git -C $src rev-parse local origin/local` | 两个 SHA 相同 |
+| 分支职责 | 见 §1.1 末 | `master` 存档、`upstream-mirror` 只读镜像、`local` 唯一活分支 |
+| 上游与 fork 关系 | `git -C $src merge-base local upstream-mirror` | **空**（无共同祖先 ⇒ 只能 cherry-pick / 重建，不能 merge） |
+| 镜像冻结 | `git -C $src rev-parse upstream-mirror final-upstream-1.1.92` | 两点相同 |
+| 宿主依赖 | profile `package.json` 的 `dependencies.'dsh-purge'` | `file:$SRC`（不是 registry 版本、不是 tarball URL） |
+| 安装副本形态 | `(Get-Item $inst).LinkType` | 空（独立拷贝，不是 junction） |
+| 副本一致性 | §1.3 D 的逐文件 SHA 脚本 | **`DIFF=0`**；`MISSING` 只能是「打包白名单外」的文件（见下） |
+| `allowBuilds` | profile `pnpm-workspace.yaml` 的 `allowBuilds:` | **恰好 2 行**：裸包名 + 带引号的 `file:` 键 |
+| 版本号 | `src/package.json` 的 `version` | **等于 fork 点那版，永不改**（禁区 3） |
+| **`app.asar`** | `Test-Path <DSH_ROOT>\resources\app.asar` | **False**（已改名 `.bak`） |
+| **`app-update.yml`** | `Test-Path <DSH_ROOT>\resources\app-update.yml` | **False**（应已 `.disabled`） |
+| 补丁层自洽 | §0.B 的 CLI `--status` | `pending=0`、`drifted=0`、`errors.log` 不存在；`applied + na + skipped + missing_file` 必须等于 `core.js` 里 `id:` 的总条数 |
+| `dshTarget` 分布 | `git grep -n '"dshTarget"' -- package.json` | 只有 `src/package.json` 一处（代码里零引用 ⇒ 插件不会自己拦版本） |
 
-> **「补丁层」和「插件本体」是两个独立的东西，别混**（2026-10-29 14:25 两层全部 ✓）：
->
-> | 层 | 从哪加载 | 现在状态 | 坏了的表现 |
-> |---|---|---|---|
-> | **插件本体**（命令、面板、红队 preset、64 个工具） | `~/.dsh/profiles/desktop/node_modules/dsh-purge` | ✓ 在、189 文件、独立拷贝、`version` 1.1.73 | 面板没按钮 / 命令不存在 / 红队工具变少 |
-> | **宿主补丁层**（86 个 patch id：审批门、沙箱策略、提示词注入、隐藏控制台等） | `resources\app\`（解包目录） | ✓ `app.asar` 已改名，78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file | `/purge status` 报 `✗ app.asar: 还在`、applied=0 |
->
-> 换句话说：**插件自己的面板和红队工具在没有补丁时照样能用**（它们只是普通插件代码）；
-> 补丁管的是「宿主对模型的限制」。所以「现在 purge 能用吗」的答案是：
-> **两层都在，全功能可用。** 若哪天 `app.asar` 又回来了，就是「插件功能仍可用、破甲/审批放行失效」。
->
-> 唯一非致命缺失项：patch **#71 `LIANGSHEN_IDENTITY_LINE` = `missing_file`**
-> （该补丁 `file: ["preset-liangshen","preset-liangshen-pkg"]`、`strictFiles:true`，
-> 本机没装「梁神」预设包，属预期缺失，不是故障）。
+**`MISSING` 的合法集合**（脚本报 MISSING 不算错，只有超集才是错）：
+`package.json` 的 `files[]` 之外的文件，即点文件（`.gitignore` / `.npmignore` / `.github/`）、
+`LICENSE-COMMERCIAL.md`、`release-notes.md`、`md\` 三份文档、`test\` 全部。
+判据：**`MISSING` 里出现 `lib\` / `bin\` / `skills\` / `presets\` / `client.js` 任何一个 = 打包配置坏了**（见禁区 17）。
 
-核对命令（一条条跑，对照上表）：
+### 0.B 快照怎么取（数字取完写 log，别写回来）
 
 ```powershell
 $src='$SRC'
-git -C $src branch --show-current
-git -C $src log --oneline -1
-git -C $src status --porcelain          # 必须为空
-git -C $src rev-parse local upstream-mirror   # 全 SHA，可靠（左边是活分支）
-# 想要短 hash：--short 只接受单个 rev（多 rev 会报 fatal: Needed a single revision），逐个跑
-foreach($r in @('local','origin/local','origin/master','upstream-mirror')){
-  "{0,-16} {1}" -f $r, (git -C $src rev-parse --short $r)
-}
-(Get-Content '<USERPROFILE>\.dsh\profiles\desktop\package.json' -Raw | ConvertFrom-Json).dependencies.'dsh-purge'
-Test-Path '<DSH_ROOT>\resources\app.asar'          # 必须 False
-Test-Path '<DSH_ROOT>\resources\app-update.yml'    # 必须 False（已改名 .disabled）
-git -C $src tag -l 'final-upstream-1.1.92' 'baseline-mmparko-1.1.71'   # 末代上游 / 1.1.71 基线
+$inst=Join-Path $env:USERPROFILE '.dsh\profiles\desktop\node_modules\dsh-purge'
+# 宿主路径一律枚举取（目录名/可执行文件名里都有空格，手抄必漏 —— 实测漏一个空格就全 False）
+$base=(Get-ChildItem 'D:\Program Files' -Directory |
+        Where-Object { $_.Name -like '*Deep*' -and (Test-Path -LiteralPath (Join-Path $_.FullName 'resources\app')) } |
+        Select-Object -First 1).FullName
+$exe=(Get-ChildItem -LiteralPath $base -Filter *.exe |
+      Where-Object { $_.Name -notlike 'Uninstall*' } | Select-Object -First 1).FullName   # 别拼名字，直接取
+
+# ① 代码侧快照
+foreach($r in @('local','origin/local','upstream-mirror')){ "{0,-16} {1}" -f $r,(git -C $src rev-parse --short $r) }
+# 计数用 rev-list --count，别用 `log --oneline | Measure-Object`（实测会少报：18 条只数出 14 条）
+"port 链 : " + (git -C $src rev-list --count --grep='^port:'  local)
+"local 链: " + (git -C $src rev-list --count --grep='^local:' local)
+"补丁条数: " + (Select-String -Path "$src\lib\core.js" -Pattern '^\s+id: \d+' -AllMatches).Matches.Count
+
+# ② 宿主侧快照
+"宿主版本: " + (Get-Item -LiteralPath $exe).VersionInfo.FileVersion
+"app.asar: " + (Test-Path -LiteralPath (Join-Path $base 'resources\app.asar'))
+"update.yml: " + (Test-Path -LiteralPath (Join-Path $base 'resources\app-update.yml'))
+"app 文件数: " + (Get-ChildItem -LiteralPath (Join-Path $base 'resources\app') -Recurse -File).Count
+
+# ③ 副本侧快照（逐文件比对用 §1.3 D，这里只要计数）
+"副本文件: " + (Get-ChildItem $inst -Recurse -File -Force).Count
+"skills  : " + (Get-ChildItem (Join-Path $inst 'skills') -Recurse -File).Count
+
+# ④ 补丁状态（**判基线只认这个口径**，别用 GUI 的 rollup 数字）
+$env:DSH_SURFACE='desktop'
+$env:DSH_BASE=(Join-Path $base 'resources\app\dsh\node_modules\@deepseek-ai')
+node "$src\bin\dsh-purge.js" --status
 ```
 
-> ⚠️ **宿主目录名带空格，硬编码路径会「假报不存在」。** 2026-11-02 实测：
-> 写死 `<DSH_ROOT>…` 时 `Test-Path` / `Test-Path -LiteralPath` / `node fs.statSync`
-> 全部返回 False / ENOENT，但用 `Get-ChildItem 'D:\Program Files'` 枚举出来的 `FullName` 就正常。
-> 凡是碰宿主路径，一律先枚举取真名：
->
-> ```powershell
-> $base = (Get-ChildItem 'D:\Program Files' -Directory | Where-Object { $_.Name -like '*Deep*' } | Select-Object -First 1).FullName
-> ```
->
-> **不开 GUI 也能查补丁状态**（CLI 直读宿主；`DSH_BASE` 必须是 `resources\app\dsh\node_modules\@deepseek-ai`）：
->
-> ```powershell
-> $env:DSH_SURFACE='desktop'
-> $env:DSH_BASE=(Join-Path $base 'resources\app\dsh\node_modules\@deepseek-ai')
-> node $SRC\bin\dsh-purge.js --status
-> # 需要补打时换成 --apply；打完再 --status 复查 drifted 必须为 0
-> ```
+> **两套口径必须分清**：CLI `--status` / `patch_status` 是 **patch id 口径**（86 条逐条计数，**判基线用它**）；
+> GUI 的 `/dsh-purge/status` 是 **rollup 口径**（同一条清洗链合成一行、把 `na` 摊进 `ready`，数字天然更小）。
+> 拿 rollup 的 `applied` 去比 patch id 的 `applied`，会得出「掉了 10 个补丁」的假警报。
+> GUI 端口每次重启都换，要么看窗口标题，要么按 §0.5.6 扫端口。
+
+### 0.C 架构：补丁层与插件本体是两个独立的东西
+
+| 层 | 从哪加载 | 里面是什么 | 坏了的表现 |
+|---|---|---|---|
+| **插件本体** | `<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge` | 命令、面板、红队 preset、64 个工具 | 面板没按钮 / 命令不存在 / 红队工具变少 |
+| **宿主补丁层** | `resources\app\`（apply 解包出来的目录） | 86 个 patch id：审批门、沙箱策略、提示词注入、隐藏控制台等 | `/purge status` 报 `✗ app.asar: 还在`、applied=0 |
+
+**补丁管的是「宿主对模型的限制」，不是插件能不能跑。** 面板和红队工具只是普通插件代码，
+`app.asar` 回来了也照样能用，只是破甲与审批放行失效。反过来：插件本体缺失时补丁仍在宿主里生效。
+
+> 唯一允许长期存在的 `missing_file`：**#71 `LIANGSHEN_IDENTITY_LINE`**
+> （`file: ["preset-liangshen","preset-liangshen-pkg"]` + `strictFiles:true`，本机没装「梁神」预设包 ⇒ 预期缺失）。
+> 除它之外出现 `missing_file`，一律当故障查。
 
 ---
 
@@ -238,31 +259,29 @@ git -C $src tag -l 'final-upstream-1.1.92' 'baseline-mmparko-1.1.71'   # 末代�
 4. 升 DSH 之后**必须重走一遍** `/purge apply` 解包 + 用户手动改名 `app.asar` → `app.asar.bak`（§4.6.1）。
    这不是可选步骤 —— 宿主的升级程序会把 `resources\app\` 整个删掉、把 `app.asar` 放回来。
 
-### 0.5.2 上游支持矩阵（2026-11-10 快照，末代上游 = tag `final-upstream-1.1.92` = `fc6e787` = 1.1.92）
+### 0.5.2 上游支持矩阵（**判据，不是读数**）
 
-| DSH 宿主版本 | 该用哪个 dsh-purge | 上游原话 |
-|---|---|---|
-| `0.2.1-rc.2` | **1.1.88**（我们 `local` 已 port，标 `1.1.73`） | `dshTarget` = `0.2.1-rc.2`；README 仍写 `1.1.81 targets DSH 0.2.1-rc.2` |
-| `0.2.0-rc.2` | 1.1.40 或更新 | `0.2.0 still works` |
-| `0.1.7`（含 rc.1/rc.2） | 1.1.39 或更旧 | `use 1.1.39 or older` |
-| **`0.2.1-rc.5`** | **⚠ 上游声称支持（`dshTargets` + 6 条双 pattern），README 未改口** | release-notes 1.1.88：`#32/#36/#50/#53/#57/#62 在 rc.2 与 rc.5 上都能命中`；`web + desktop 双宿主 73/85 applied、0 pending、0 drifted` |
-| **`0.2.1-rc.3` / `rc.4`** | **❌ 不支持** | `DSH 0.2.1-rc.3 and newer RCs are not supported. Stay on 0.2.1-rc.2.` |
+**判据只有一条**：三处依据（`dshTarget` / README 兼容矩阵 / release-notes）**一致指向同一个 rc** 才算「上游支持」；
+**任何两处打架 ⇒ 按「不支持」处理**，并把矛盾原样写进汇报。
 
-> **rc.5 的口径**：上游代码层已适配（86 条里 6 条双 pattern，其余 80 条在 rc.5 上应「不命中但不漂移」），
-> 但 README 的 not-supported 没改、我们也没在真机验过 ⇒ **只当「待验证」**。
-> 升 rc.5 前必须先在 rc.5 的 `resources\app` **副本**上跑一遍 86 条，`drifted` 必须为 0。
+由此派生的固定规则（不随读数变化）：
 
-上游 README 原文（`README.md` L60 / L136-139，`README.zh-CN.md` 同款）：
-> **1.1.81** targets **DSH 0.2.1-rc.2** (0.2.0 still works). **DSH 0.2.1-rc.3 and newer RCs are not supported.**
-> **dsh 0.2.1-rc.3 / rc.4 and newer are not supported.** Unmatched patches stay pending or skipped; nothing is rewritten blindly. Stay on **0.2.1-rc.2**.
+| 情况 | 结论 |
+|---|---|
+| 三处都说支持某个 rc | 才进 §0.5.5 升级流程（且必须是我们已 port 并自检过的那个 rc） |
+| `dshTarget` 写了新版，但 README 的 not-supported 没改（或反之） | **不支持**。这是最常见的一种「假支持」—— 只看 `dshTarget` 会误判 |
+| release-notes 只是说「某些补丁在新 rc 上也能命中」 | 那是「部分可用」，**不等于支持**，不能据此放行 |
+| 上游 README 明确写「rc.N 及更新不支持」 | 除非它改口，否则**永远不支持**，无论 `dshTarget` 写什么 |
 
-release-notes 原文（`release-notes.md` L26 / L35）：
-> **#176**：写清 **不支持 DSH 0.2.1-rc.3 及更新的 rc**，请退回 **0.2.1-rc.2**。对不上的补丁待应用或跳过，不乱改文件。
+> **当前读数（三处各写了什么、`dshTarget` 现在是哪个 rc、我们自己的 `package.json` 是哪个）一律看
+> `UPDATE-LOG.md` 附录 I「基线快照」。** 本文不记录读数 —— 记了就会腐烂，2026-11-10 已经烂过一次。
+> 唯一稳定的事实：**本机宿主的版本由用户手动降/升，插件不会自己拦**（`dshTarget` 代码里零引用，见 §0.5.4）。
 
 ### 0.5.3 一条命令查「上游现在支不支持」（只读，随便跑）
 
 ```powershell
 $src='$SRC'
+# <DSH_ROOT> 换成真实安装目录、<HOST_EXE> 换成主程序文件名 —— 两者都带空格，按 §0.B 枚举取，手抄必漏
 # ⚠️ 上游已 404（§0.0.1）。先探活：可达才 fetch；不可达就把 BASE_REF 指向末代 tag，
 # 下面三条 git show 全部用 $BASE 而不是 upstream/master（后者 fetch 失败后是不可靠的陈旧 ref）。
 # 2>$null：git 把 404 写到 stderr，pwsh 会当成 NativeCommandError 抛出。
@@ -288,21 +307,21 @@ git -C $src show "${BASE}:release-notes.md" |
   Select-Object -First 6 | ForEach-Object { '  ' + $_.Line.Trim() }
 
 '=== ④ 本机现状对照 ==='
-'  本机宿主  : ' + (Get-Item '<DSH_ROOT>\DeepSeek Harness.exe').VersionInfo.FileVersion
+'  本机宿主  : ' + (Get-Item -LiteralPath (Join-Path $base '<HOST_EXE>')).VersionInfo.FileVersion
 '  本机插件  : ' + (Get-Content "$src\package.json" -Raw | ConvertFrom-Json).version
-'  插件 dshTarget : ' + ((git -C $src show "${BASE}:package.json" | ConvertFrom-Json).dshTarget)
+'  本机 dshTarget : ' + ((Get-Content "$src\package.json" -Raw | ConvertFrom-Json).dshTarget) + '   ← 本机的，不是上游的'
 '  app.asar  : ' + (Test-Path '<DSH_ROOT>\resources\app.asar') + '  (必须是 False)'
 '  update.yml: ' + (Test-Path '<DSH_ROOT>\resources\app-update.yml') + '  (必须是 False)'
 ```
 
-判定：
+判定（照 §0.5.2 那条判据走，不认「看起来像支持」）：
 
-- 上游 `dshTarget` 变成 `0.2.1-rc.3`（或更高）**且** README 里「not supported」那句被改掉
-  → **上游已支持新版**，进 §0.5.5 走升级流程。
-- 上游 `dshTarget` 还是 `0.2.1-rc.2`，README 仍写着 not supported
-  → **不许升**，直接告诉用户「上游还没适配，先别动 DSH」。
-- 两者矛盾（`dshTarget` 升了但 README 没改，或反之）→ **以 README + release-notes 为准**，
-  并在汇报里把这个矛盾原样说出来。
+- **三处一致说支持** → 才算「上游已支持」，进 §0.5.5。**必须三处一致**，少一处都不行。
+- **`dshTarget` 改了、README 没改（或反之）** → **不许升**。汇报原话：「上游代码层把目标改到了 `<rc>`，
+  但公开声明仍是 `not supported`，两边打架，按不支持处理。」
+- **README 改口了、`dshTarget` 还是旧的** → 同样按「不支持」，等上游把两处对齐。
+- **release-notes 只说「某几个补丁在新 rc 上能命中」** → 那是部分可用，**不构成支持**。
+- 结论一句话给用户：**能升 / 不能升**，加上三处依据的**本轮读数**（读数取自命令输出，别抄文档）。
 
 ### 0.5.4 ⚠️ 插件**不会**拒绝启动（必须靠人守闸门）
 
@@ -326,7 +345,7 @@ git -C $src show "${BASE}:release-notes.md" |
 | ⑤ | 用户 | 装新版 DSH 安装包 / 打开自动更新让它升 | `FileVersion` 变成 A.B.C |
 | ⑥ | 用户 | 打开宿主 → 应用内 `/purge apply`（或 GUI 面板 Apply）重新解包 | `unpacked_asar:true` |
 | ⑦ | 用户 | **完全退出宿主 + 退出 WorkBuddy** → 手动把 `app.asar` 改名成 `app.asar.bak` → 重开（§4.6.1 四步） | `app.asar` = False |
-| ⑧ | 助手 | `/purge status` 复查：applied 数是否回到满值（当前 78/86，新宿主可能变） | 无 `✗ app.asar: 还在`、无 `errors.log` 新增 |
+| ⑧ | 助手 | `/purge status` 复查：`applied` 是否回到「满值」（= patch id 总数 − 该宿主下应 na/skipped 的项；新宿主可能整体变） | 无 `✗ app.asar: 还在`、无 `errors.log` 新增、`drifted=0` |
 
 > **④ 那句话必须说清楚「现在可以升了」+「升完还要做 ⑤⑥⑦」。** 只丢一句「上游更新了」
 > 会让用户以为插件已经能用而直接升，那就又回到空窗期。
@@ -340,7 +359,7 @@ git -C $src show "${BASE}:release-notes.md" |
 $R='<DSH_ROOT>\resources'
 "app.asar      : " + (Test-Path "$R\app.asar")        # 升完重开前会是 True；swap 后必须 False
 "resources\app : " + (Test-Path "$R\app")             # 必须 True（apply 解包产物）
-"宿主版本      : " + (Get-Item (Join-Path (Split-Path $R) 'DeepSeek Harness.exe')).VersionInfo.FileVersion
+"宿主版本      : " + (Get-Item -LiteralPath (Join-Path (Split-Path $R) '<HOST_EXE>')).VersionInfo.FileVersion
 
 # 再看插件活体状态（端口取当前 GUI 地址，会在托盘/窗口标题里；或用下行的自动探测）
 $ports = (Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
@@ -441,8 +460,9 @@ git -C $src push -q origin ("upstream-snapshot-" + (Get-Date -Format 'yyyyMMdd')
 改变宿主源码（补丁匹配点可能消失）。而上游是否更新，往往只是**宿主升级带来的后果**。
 
 ```powershell
+# <DSH_ROOT> / <HOST_EXE> 按 §0.B 的枚举结果填（名字带空格，手抄必漏）
 # ① 宿主版本（记下来跟上次比对）
-(Get-Item '<DSH_ROOT>\DeepSeek Harness.exe').VersionInfo.FileVersion
+(Get-Item -LiteralPath (Join-Path $base '<HOST_EXE>')).VersionInfo.FileVersion
 # 对照基线：0.2.1-rc.2
 
 # ② app.asar 是否又出现了 ← 最强信号
@@ -468,7 +488,7 @@ Test-Path '<DSH_ROOT>\resources\app-update.yml'
 | **`app-update.yml` 又变成 True** | 有人重装了宿主安装包或还原了 resources | **立刻让用户改名 `.disabled`**（不用重启，改名即生效）；再查 `app.asar` 与 applied 数 |
 | `app.asar` 变成 True，但 `app\` **还在** | 宿主升级过（归档被放回，解包目录里补丁可能仍可读） | 先 `/purge status` 看 applied 数；掉了就把 `app.asar` 改名（**让用户做**，见 §4.6.1）|
 | **`app.asar` 为 True，且 `app\` 不存在** | **最惨：升级把解包目录删了，补丁全部失效，插件等于没装** | ① 应用内 `/purge apply` 重新解包 → ② 完全退出宿主（含 WorkBuddy）→ ③ 用户手动把 `app.asar` 改名成 `app.asar.bak` → ④ 重开宿主（详见 §4.6.1） |
-| 跑完脚本 applied 仍 < 61 | 宿主源码变了，补丁匹配不上 | **这时才需要上游适配后的 `core.js`**，进 §1.5 ① 查 blob |
+| 跑完脚本 `applied` 明显低于满值（满值 = 总数 − na − skipped − missing_file） | 宿主源码变了，补丁匹配不上 | **这时才需要上游适配后的 `core.js`**，进 §1.5 ① 查 blob |
 | 版本号变了但 applied 没掉 | 宿主升了但补丁仍匹配 | 只需把 `app.asar` 改名（用户手动），无需跟上游 |
 
 > **反向结论也要记住**：如果 `app.asar` 是 False、版本没变、applied 数没掉，那就算上游推送了
@@ -522,17 +542,22 @@ Test-Path '<DSH_ROOT>\resources\app-update.yml'
 | **能力收窄/文案调整** | `lib/core.js` 的 blob **不变**；改动集中在 `skills/`、`README`、`net-scope.js` 名单、`redteam/*` 开关 | **不跟。** 跟了只会让能力变少，换不到新功能 |
 | **适配宿主版本** | `lib/core.js`（或 `update.js`/`index.js`）的 blob **变了** | **必须跟。** 否则宿主一升级，补丁全部匹配不上 |
 
-判定命令就一条：
+判定命令就一条（**比的是「上游上一版 → 上游这一版」，不是拿 `local` 去比**）：
 
 ```powershell
-# 左边必须是 local（本机在装的），不是 origin/master（fork 存档，停在 1.1.73）
-git -C $src rev-parse local:lib/core.js upstream-mirror:lib/core.js
+# $PREV = 上一次的基线 ref（现在是 tag final-upstream-1.1.92）；$BASE = 本次候选 ref
+git -C $src rev-parse "${PREV}:lib/core.js" "${BASE}:lib/core.js"
 ```
 
-两个 hash 相同 → 上游没动补丁规则 → 无论它改了多少文件，都不值得跟。
+两个 hash 相同 → 上游这次没动补丁规则 → 无论它改了多少文件，都不值得跟。
 
-> ⚠️ **别用 `origin/master:lib/core.js`**：`origin/master` 是 fork 的历史存档，它跟上游比永远是「变了」，
-> 但那些改动可能早就 `port:` 进 `local` 了。用它当左边会把「已经搬过的」重新算一遍，结论是假的。
+> ⚠️ **别拿 `local:lib/core.js` 和 `upstream-mirror:lib/core.js` 比。** 两者**永远不相等** ——
+> `core.js` 里有我们两处 fork 修正（`insertProbe` ×2 + `rollupPatchStatus` 保留「已写入优先于 drifted」，共 16 行，
+> 见 §7 第 4 条），两边 hash 天然不同。用这个比法，结论恒为「变了 ⇒ 必须跟」，
+> 是假信号。`local` 那侧只用来查「我们落地没落地」。
+>
+> ⚠️ **也别用 `origin/master:lib/core.js`**：`origin/master` 是 fork 的历史存档，停在 1.1.73，
+> 跟上游比永远是「变了」，但那些改动可能早就 `port:` 进 `local` 了。用它当左边会把「已经搬过的」重新算一遍。
 
 ### 1.3 算出「差在哪」—— 四种对比，按需选
 
@@ -542,7 +567,8 @@ git -C $src rev-parse local:lib/core.js upstream-mirror:lib/core.js
 git -C $src diff --stat master local
 ```
 
-预期**首次**是 `package.json | 6 +++---`。⚠️ **但这个数字一旦做过部分更新就不再干净**，见 §1.3.1。
+预期**只有地址改动时**是 `package.json | 6 +++---`（3 处 `dsh.install` 地址）。
+⚠️ 这个数字只对「刚 fork、还没 port 过」的树成立；做过任意一次 port 之后它就是混合清单了（见 §1.3.1），别拿它当指标。
 
 判断「哪些是我们自己的定制」不要靠 diff，靠 commit 消息前缀：
 
@@ -611,10 +637,14 @@ Get-ChildItem $src -Recurse -File -Force | Where-Object { $_.FullName -notmatch 
   if (-not (Test-Path $b)) { "MISSING $rel"; $script:diff++ }
   elseif ((Get-FileHash $_.FullName -Algorithm SHA256).Hash -ne (Get-FileHash $b -Algorithm SHA256).Hash) { "DIFF $rel"; $script:diff++ }
 }
-if ($diff -eq 0) { '安装副本与源码完全一致' } else { "漂移 $diff 个文件（预期 5 个是 .gitignore/.npmignore/LICENSE-COMMERCIAL.md/release-notes.md/.github/）" }
+if ($diff -eq 0) { '安装副本与源码完全一致' } else { "差异 $diff 个文件（MISSING 只许在白名单内，见下行判据）" }
 ```
 
-> 正常情况：报 5 个 `MISSING`，全是打包白名单外的文件。若报 `DIFF`，说明有人直接改了安装副本没改源码 —— 先报告，别顺手覆盖。
+> 正常情况：报 **17** 个 `MISSING`，全是打包白名单外的文件 ——
+> `.github/workflows/release.yml`、`.gitignore`、`.npmignore`、`LICENSE-COMMERCIAL.md`、`release-notes.md`、
+> `md\UPDATE-GUIDE.md`、`md\UPDATE-LOG.md`、`md\FORK-GUIDE.md`（这 8 个）+ `test\` 下 9 个。
+> `md\` 三份文档报 MISSING 是**正常的**：`md` 不在 `package.json` 的 `files[]` 里，本来就不随包。
+> 若报 `DIFF`，说明有人直接改了安装副本没改源码 —— 先报告，别顺手覆盖。
 
 ### 1.4 关键：判断改动的「性质」
 
@@ -623,7 +653,7 @@ if ($diff -eq 0) { '安装副本与源码完全一致' } else { "漂移 $diff �
 | 层 | 文件 | 判断要点 |
 |---|---|---|
 | **安全语义层** | `lib/net-scope.js`、`lib/redteam/*` | 改的是「哪些目标被放行」。**必须逐行看语义，不能只看行数。** |
-| **补丁定义层** | `lib/core.js`、`lib/update.js`、`lib/index.js` | 82 个补丁的匹配规则与状态机。**用 blob hash 比，不要肉眼看**（见 §1.5） |
+| **补丁定义层** | `lib/core.js`、`lib/update.js`、`lib/index.js` | **86** 个补丁的匹配规则与状态机（`core.js` 里 86 个 `id:`）。**用 blob hash 比，不要肉眼看**（见 §1.5） |
 | **面板 UI 层** | `client.js`（~2000 行） | 大部分是文案/字段增删，安全影响小，但会改变面板行为 |
 | **打包配置层** | `package.json` 的 `files` / `scripts` | 决定哪些目录会被装进宿主（`skills` 是否随包） |
 | **文档层** | `README*.md`、`release-notes.md` | 零运行影响，只看要不要同步声明 |
@@ -633,11 +663,12 @@ if ($diff -eq 0) { '安装副本与源码完全一致' } else { "漂移 $diff �
 
 ```powershell
 $src='$SRC'
-# ① 补丁定义有没有变（左边用 local，不是 origin/master）
-#    相同 blob = 我们手上这棵树和上游一致，补丁规则零差异
-git -C $src rev-parse local:lib/core.js upstream-mirror:lib/core.js
-git -C $src rev-parse local:lib/update.js upstream-mirror:lib/update.js
-git -C $src rev-parse local:lib/index.js upstream-mirror:lib/index.js
+$PREV='final-upstream-1.1.92'   # 上一次的基线 ref
+$BASE=$PREV                    # 本次候选；上游复活后改成 upstream/master
+# ① 补丁定义有没有变 —— 比「上游上一版 vs 本次」，不要拿 local 比（local 恒不等，见 §1.2.4）
+git -C $src rev-parse "${PREV}:lib/core.js" "${BASE}:lib/core.js"
+git -C $src rev-parse "${PREV}:lib/update.js" "${BASE}:lib/update.js"
+git -C $src rev-parse "${PREV}:lib/index.js" "${BASE}:lib/index.js"
 
 # ② 放行名单有没有被砍（条目数对比）
 $up = git -C $src show upstream-mirror:lib/net-scope.js
@@ -664,9 +695,9 @@ foreach($pair in @(@('upstream',$up), @('fork',$fk))){
 | `RANGE_HOSTS` 条目数 | **32** | 上面 §1.5 ② 的脚本 |
 | `permittedHost()` | 不得被改成 `return false` | 读 `lib/net-scope.js` |
 | 公网靶场 / 长任务 | 不得被无条件拦截 | 读 `lib/redteam/**` 里的门禁分支 |
-| 审批放行 / 提示词注入 / 隐藏控制台 | 必须仍在 applied 里（当前 78/86） | `/purge status` 对照 |
+| 审批放行 / 提示词注入 / 隐藏控制台 | 必须仍在 `applied` 里（按 patch id 查，别被 rollup 数字骗） | `/purge status` 或 CLI `--status` 对照对应 id |
 | 新增「默认关闭 / 需显式开启」开关 | 一律按收窄处理 | diff 里找 `enabled: false`、`?? false`、`optIn` |
-| 写死地址 | 不得出现 `YuJunZhiXue`（上游原文引用除外） | `git grep -n 'YuJunZhiXue' -- lib client.js` |
+| 写死地址 | 运行代码里只允许 §4.1.2 白名单列的 5 处，且 `dsh.install` 三处必须是 `wyybs` | `git grep -n 'YuJunZhiXue' -- lib client.js \| grep -v -E 'update\.js:12\|redteam/ui\.js:360\|client\.js:(143\|501)'` → **输出必须为空**（白名单细节见 §4.1.2） |
 
 > 判完性质再谈工作量。**「收窄」的项目不进 cherry-pick 清单**，只在 §2 汇报里列出并标「不跟」，
 > 让用户看得见「上游砍了什么、我们没跟」。
@@ -679,7 +710,7 @@ foreach($pair in @(@('upstream',$up), @('fork',$fk))){
 
 ```
 ## 差异总览
-- 在用的：local @ 5f7bbc2（version 1.1.73，port 链 5 条）
+- 在用的：local @ <sha>（version <本机 version>，port 链 <条数>）   ← 全部取实测值，别抄模板
 - 候选的：<ref>（version x.y.z）
 - 变了 N 个文件，+A / -D 行（命令：git diff --stat local upstream-mirror）
 - 补丁定义（core.js/update.js/index.js）：变了 / 没变（命令见 §1.5 ①）
@@ -687,7 +718,7 @@ foreach($pair in @(@('upstream',$up), @('fork',$fk))){
 - **上游性质分布**：增强 A 条 / 修复 B 条 / 适配 C 条 / **收窄 D 条 / 删除 E 条**（D+E>0 时逐条点名）
 ```
 
-然后是**分组清单**，每组统一五列：
+然后是**分组清单**，每组统一六列（表头本来就六列，别再写成五列）：
 
 ```
 ### 组：<名字>（风险等级 高/中/低）
@@ -701,7 +732,7 @@ foreach($pair in @(@('upstream',$up), @('fork',$fk))){
 组别固定按这个顺序，方便用户勾选：
 
 1. **安全语义**（`lib/net-scope.js`、`lib/redteam/*`）—— 影响「谁能被探测」
-2. **补丁定义**（`lib/core.js` 等）—— 影响 82 个补丁能不能匹配上新宿主
+2. **补丁定义**（`lib/core.js` 等）—— 影响 **86** 个补丁能不能匹配上新宿主
 3. **面板 UI**（`client.js`）—— 影响交互
 4. **打包配置**（`package.json`）—— 影响安装时带哪些目录
 5. **技能库**（`skills/**`）—— 纯素材增减
@@ -768,7 +799,7 @@ if ($shas) {
 
 ```powershell
 $src='$SRC'
-$ref='<目标 ref，比如 upstream-mirror 或某个 tag>'
+$ref='__TARGET_REF__'                 # ← 换成真实 ref（upstream-mirror / 某个 tag）；尖括号占位符不许直接跑
 $files=@(
   'lib/net-scope.js',
   'lib/redteam/tools.js'
@@ -787,14 +818,13 @@ git -C $src -c user.name="wyybs" -c user.email="wyybs@users.noreply.github.com" 
 ```
 
 > **为什么前缀要分开：**
-> - `local:` = **我们自己的定制**，全量重建时必须手工重做（现在只有 `package.json` 那条）
+> - `local:` = **我们自己的定制**，全量重建时必须手工重做（条数与清单见 `UPDATE-LOG.md` 附录 I 快照）
 > - `port:` = **从上游搬来的代码**，全量重建时从上游分支自动获得，不需要重做
 >
 > 分开之后，`git log --grep='^local:' local` 就是一份永远干净的定制清单，
 > 不受「`master → local` diff 变成混合清单」影响（§1.3.1）。
 >
-> 已有的那条 `d246244 local: 安装源指向 wyybs/dsh-purge 的 local 分支` 前缀已经是 `local:`，
-> 无需改历史。
+> 已有的本地定制提交前缀都已经是 `local:`，无需改历史（逐条清单见 `UPDATE-LOG.md` 附录 I 快照）。
 
 > ⚠️ `skills/**` 这种整目录移植要额外小心：`git checkout $ref -- skills` 会**删掉** `$ref` 里不存在的文件。
 > 取之前先 `git -C $src diff --numstat local $ref -- skills` 看清楚是增还是删。
@@ -841,26 +871,39 @@ git -C $src log --format='%s' --grep='^port:'  local    # 从上游搬来的
 
 #### 4.1.2 cherry-pick 之后**必查**：上游有没有把地址写死回 `YuJunZhiXue`
 
-上游每次动 `dsh.install` / `readPurgeTarball()` 这类地方，都会把地址写成 `codeload.github.com/YuJunZhiXue/dsh-purge/...`。
+上游每次动 `dsh.install` / 更新路径这类地方，都会把地址写成 `codeload.github.com/YuJunZhiXue/dsh-purge/...`。
 这类行一旦混进来，`file:` 钉住会以「本来无声无息」的方式失效。**每次 cherry-pick 完都跑这条**：
 
 ```powershell
 $src='$SRC'
-# 应该只剩「注释/文档里提到上游」的地方；运行代码里出现就是问题
 git -C $src grep -n 'YuJunZhiXue' -- '*.js' '*.mjs' 'package.json'
 ```
 
-判定：
+**白名单（2026-11-10 实测：运行代码里 5 处 + 文档若干，多一处都算移植事故）**：
 
-| 出现位置 | 处置 |
-|---|---|
-| `package.json` 的 `dsh.install` 三处地址 | **必须改回 `wyybs`**（这是 `local:` 定制的核心） |
-| `lib/profile-insert.js` 的 `readPurgeTarball()` fallback | **必须改回 `wyybs/dsh-purge` + `local` 分支**（1.1.80 引入的坑，见 `UPDATE-LOG.md` 附录 C） |
-| `lib/update.js` 的 `const REPO = "YuJunZhiXue/dsh-purge"` | 保留（面板更新按钮的展示用，别改，改了会和上游冲突） |
-| `README*.md` / `release-notes.md` | 保留（只是文档里的安装说明） |
+| 出现位置 | 实测内容 | 处置 |
+|---|---|---|
+| `package.json:99` 附近的 `dsh.install` 三处（`tarball` / `zip` / `git`） | 已是 `wyybs/dsh-purge` + `local` 分支 ✓ | **必须保持 `wyybs`**（`local:` 定制的核心）；被上游改回来就改回去 |
+| `package.json:62 / :64 / :66` 的 `repository.url` / `homepage` / `bugs.url` | 仍是 `YuJunZhiXue` | **建议一并改成 `wyybs`**（面板「GitHub」入口会读它）；不改不影响安装，属于待办 |
+| `lib/update.js:12` `const REPO = "YuJunZhiXue/dsh-purge"` | 保留 | **保留**。`L190-199 / L307 / L394` 的 codeload 地址全部由它拼出来，改它会和上游每次冲突 |
+| `client.js:143`、`client.js:501` 的 `welcome.repo` | 保留（欢迎页文案） | **保留**；要改就两处一起改，别只改一处 |
+| `lib/redteam/ui.js:360` 的 `return 'YuJunZhiXue/dsh-purge'` | 保留（面板展示用） | **保留** |
+| `README*.md` / `release-notes.md` | 保留 | 保留（只是文档里的安装说明） |
 
-> 这条规则的由来：`d246244 local:` 那次改动只改了 `package.json` 三处。上游 `dbaf377` 就因为把地址换回
-> codeload 而被我们跳过（见 `UPDATE-LOG.md` 附录 B）。1.1.80 的 `readPurgeTarball()` 是**新的一处**写死点，移植时一并处理。
+> 判据命令（**输出必须为空**）：
+>
+> ```powershell
+> git -C $src grep -n 'YuJunZhiXue' -- lib client.js |
+>   grep -v -E 'update\.js:12|redteam/ui\.js:360|client\.js:(143|501)'
+> ```
+>
+> 这条规则的由来：`d246244 local:` 那次只改了 `package.json` 三处；上游 `dbaf377` 因为把地址换回
+> codeload 被我们跳过（见 `UPDATE-LOG.md` 附录 B）。**1.1.80 那处写死点不是 `readPurgeTarball()`**
+> （该函数在当前代码里已不存在，`git grep readPurgeTarball` 只命中本文档），真正会复发的是
+> `package.json` 的 `dsh.install` 三处 + 上面那 4 处展示文案。
+
+> ⚠️ 代码里**没有** `readPurgeTarball()`。旧版本（1.1.80 那一代）有过这个 fallback，现在已删；
+> 看到别处文档提它，按「历史遗留」处理，别去代码里找。
 
 ### 4.2 路线二：**全量更新**（无共同祖先，不能 merge）
 
@@ -869,8 +912,8 @@ git -C $src grep -n 'YuJunZhiXue' -- '*.js' '*.mjs' 'package.json'
 
 ```powershell
 $src='$SRC'
-$ref='<目标 ref>'
-$stamp='<4.0 里的 stamp>'
+$ref='__TARGET_REF__'                  # ← 换成真实 ref（upstream-mirror / 某个 tag），别带着尖括号跑
+$stamp='__STAMP_FROM_4_0__'           # ← 换成 §4.0 里那条 pre-update-<stamp> 的实际时间戳
 
 # 0. 先把要重放的 local: 提交记下来（必须在 checkout 之前查，否则分支切走就查不到了）
 $localShas = git -C $src log --format='%H' --reverse --grep='^local:' local
@@ -1022,31 +1065,23 @@ foreach($f in @('installed-rev','applied.json','settle-restart.guard','auto-upda
 **不要自己重启。** 绝大多数情况只需要用户在托盘退出再打开：
 
 ```powershell
-# 手动：托盘退出 → 双击 DeepSeek Harness.exe
+# 手动：托盘退出 → 双击宿主主程序（`<HOST_EXE>`）
 # 脚本（等进程退出 → 重启 → 复核）：
 pwsh -NoProfile -File "$WS\scripts\host\restart-host.ps1"
 ```
 
 #### 4.6.1 ⚠️ `app.asar` 改名这一步 —— **直接让用户手动做，别写脚本**
 
-这是本项目唯一一件「脚本绕三层、用户一秒完成」的事。**2026-10-28 15:12 最终是靠用户手动改名收工的**，
-之前三条脚本路线全部失败，教训必须记住。
-
-**为什么脚本全失败（2026-10-28 实测）**
-
-| 方案 | 结果 | 死因 |
-|---|---|---|
-| `restart-host.ps1`（等宿主退出→改名→重启） | ❌ 连续 40 次 rename 后 `ABORT rename never succeeded` | 第三个持锁者：`RmGetList(app.asar)` = `2100\|WorkBuddy  16868\|DeepSeek Harness  16336\|DeepSeek Harness`。**PID 2100 = `<WB_ROOT>\WorkBuddy.exe` 的 `codebuddy --serve` sidecar**（`resources\app.asar.unpacked\cli\bin\codebuddy`），横跨宿主完整退出 |
-| `swap-now.ps1` + 计划任务 | ❌ `Last Result: 1` | 同上；且未提权建的 `schtasks` 是 `Interactive only` + 默认 23:59 触发，等于没跑 |
-| `swap-at-boot.ps1`（`PendingFileRenameOperations`） | ⚠️ 条目写进去了，但**机器一整天没真重启** | `LastBootUpTime = 2026-10-27 18:27:56` 到 10-28 14:58 未变 ⇒ 用户说的「重启」只是重启应用，SMSS 从没执行队列 |
-| **用户手动改名** | ✅ **成功并验收** | — |
+这是本项目唯一一件「脚本绕三层、用户一秒完成」的事。**历史结论只有一条：脚本路线全失败，唯一成功的是用户手动改名**
+（三套脚本各自的死因见 `UPDATE-LOG.md` 附录 D5；根因是 `app.asar` 被宿主进程 + WorkBuddy 的 `codebuddy --serve` sidecar 双重持有）。
+**所以本节只写给人看的四步，不给脚本。**
 
 **正确流程（写给人看的，4 步）**
 
-1. 托盘右键退出 **DeepSeek Harness**（要真正退干净，任务管理器里 6 个进程全部消失）。
+1. 托盘右键退出宿主（要真正退干净，任务管理器里它的全部进程都消失，本机是 6 个）。
 2. 退出 **WorkBuddy**（它的 `codebuddy --serve` sidecar 持有 `app.asar`，不退就改不了）。
 3. 资源管理器打开 `<DSH_ROOT>\resources\`，把 `app.asar` 改名成 `app.asar.bak`。
-4. 双击 `DeepSeek Harness.exe` 重开。
+4. 双击宿主主程序 `<HOST_EXE>` 重开。
 
 **改名前自检**（可以不提权、一条命令判定）：
 
@@ -1077,18 +1112,20 @@ powershell -ExecutionPolicy Bypass -File "$WS\scripts\host\swap-at-boot.ps1" -Di
 
 arm 完必须**关机再开机**（不是重启应用）。三道闸门：非管理员直接退 / `resources\app\` 不存在
 直接 `ABORT` / 重复 arm 自动识别已存在的同源项。已验证 `resources\app\` 是完整可引导树
-（18367 文件 / 416.3 MB，`main=lib/main.js` 可解析，`dsh-desktop-host\lib\index.js` 在，
+（文件数与体积见 log 快照；结构性要求是 `main=lib/main.js` 可解析、`dsh-desktop-host\lib\index.js` 在，
 `runtime` 指向 `..\runtime`），改名后不会出现「无处可启动」。
 
 **swap 成功的验收标志**：
 
 ```
 app.asar     = False
-app.asar.bak = True（182,794,869 B）
-resources\app= True（18367 文件）
+app.asar.bak = True（体积与 app.asar 原档一致）
+resources\app= True（文件数 > 0，且与 apply 解包前一致）
 宿主进程命令行全部走 app\（无 --expose-internals "...\app.asar\dsh\..."）
-/dsh-purge/status → applied=61 pending=0 skipped=5 ready=66
-                     asar_still_sealed=false patches_lost=false ready=true
+/purge status（patch id 口径）→ pending=0、drifted=0，applied + na + skipped + missing = 补丁总数
+                                 无 errors.log 新增
+                                 asar_still_sealed=false patches_lost=false ready=true
+（HTTP /dsh-purge/status 是 rollup 口径，数字天然更小，仅展示、不作判据）
 dsh.cmd --version → 0.2.1-rc.2，exit 0
 ```
 
@@ -1117,7 +1154,7 @@ git -C $src status --porcelain         # 空
 # ② 安装副本版本一致
 (Get-Content "$inst\package.json" -Raw | ConvertFrom-Json).version
 
-# ③ 逐文件一致性（预期 5 个 MISSING，0 个 DIFF）
+# ③ 逐文件一致性（**DIFF 必须 0**；MISSING 只许是打包白名单外的文件）
 #    用 §1.3 D 的脚本
 
 # ④ 安装源仍指向 wyybs
@@ -1148,12 +1185,12 @@ if (!Object.hasOwn(input, "additionalProperties") || typeof input.additionalProp
 
 **离线自检脚本**（不需要宿主、不需要重启，直接跑）。
 
-> ⚠️ **2026-10-28 修正：旧版这份脚本在本机跑不通。** 直接 import 安装副本的
-> `lib\redteam\tools.js` 会立刻报
-> `dsh-purge/redteam/tools: cannot resolve @deepseek-ai/dsh-tools from host`
-> （抛点在 `src\lib\redteam\tools.js:99`）—— 因为宿主的 `@deepseek-ai/dsh-tools`
-> 打包在 `app.asar` 里，node 的解析器穿不进去。
-> 现在 rc.3 之后 `resources\app\` 解包目录也不存在了，所以连"指到解包目录"这条退路都没了。
+> ⚠️ **不能直接 import 安装副本的 `lib\redteam\tools.js`** —— 会报
+> `dsh-purge/redteam/tools: cannot resolve @deepseek-ai/dsh-tools from host`（抛点 `lib/redteam/tools.js:99`），
+> 因为宿主的 `@deepseek-ai/dsh-tools` 打在 `app.asar` 里，node 解析器穿不进去。
+> 现在 `resources\app\` **在 apply 解包之后才有**：只要装过补丁就一直在，
+> §0.B 那条 CLI 正是靠 `DSH_BASE = …\resources\app\dsh\node_modules\@deepseek-ai` 跑的。
+> 只有「rc.3+ 干净安装、还没 apply」时它才不存在 —— 那时连退路都没有，只能走下面的 stub。
 >
 > **正确做法：搭一个 stub 宿主。** `loadDefineTool()` 会扫
 > `process.cwd()/package.json`，只要把 cwd 设成一个自带
@@ -1225,7 +1262,8 @@ try { & $node $tmp 2>$null | Select-Object -First 1 } finally { Pop-Location }
 然后在**应用内**跑 `/purge status`，确认：
 
 - 不出现 `✗ app.asar: 还在`（`asar_still_sealed:false`）
-- `补丁 / patches` = **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file（共 86）**，`drifted` 必须为 **0**
+- 补丁状态：`pending` = 0、`drifted` = 0，且 `applied + na + skipped + missing_file` = `core.js` 里 `id:` 总数
+  （**具体条数看 log 快照**，别拿别处的旧数字比）
 - `patches_lost:false`、`ready:true`
 - `#80 MINIMAL_OFFICIAL_TOOLSET` skipped（本机无 minimal 预设）、`#71 LIANGSHEN_IDENTITY_LINE` missing_file（缺「梁神」预设包）—— 两个都属预期
 - `errors.log` 没有新增（当前不存在）
@@ -1237,7 +1275,8 @@ $r = Invoke-WebRequest -Uri 'http://127.0.0.1:<GUI_PORT>/dsh-purge/status' -UseB
 $j = $r.Content | ConvertFrom-Json
 '{0} applied={1} pending={2} skipped={3} ready={4} sealed={5} lost={6}' -f `
   $j.surface,$j.patches_applied,$j.patches_pending,$j.patches_skipped,$j.patches_ready,$j.asar_still_sealed,$j.patches_lost
-# 期望：desktop applied=77 pending=0 skipped=1 ready=85 sealed=False lost=False（na=6、missing_file=1）
+# 判据（rollup 口径只做交叉检查）：sealed=False、lost=False；数字别拿去比 patch id 口径
+# 判基线别看这行，看 CLI 的 patch id 口径（pending=0 / drifted=0 且四项之和等于总数）
 ```
 
 再跑一次命令行入口，确认 shim 没坏：
@@ -1274,15 +1313,20 @@ git -C $src checkout -B local v1.1.73-wyybs
 
 ## 7. 禁区（每次都要念一遍）
 
-1. **不许点面板的「检查更新 / 立即更新 / 切换版本」**。`lib/update.js:861` 的 `gitResetTo` 会对
+1. **不许点面板的「检查更新 / 立即更新 / 切换版本」**。`lib/update.js:860` 的 `gitResetTo` 会对
    `file:` 依赖执行 `git fetch origin --tags` + `git checkout -B master origin/master`（`force` 默认 true），
    `pinInstalledSpec()`（`lib/update.js:308`）还会把 profile 的 `file:` spec 改写成上游 codeload 地址 ——
    **钉版当场失效**。启动路径不会自动升（`autoUpdateIfNeeded()` 在 `lib/update.js:1128` 直接返回
    `skipped:"manual-only"`），所以只要不点按钮就安全。
 2. **不许 `git merge upstream/master`**（无共同祖先），不许 `git rebase`（会改写 `local` 历史）。
 3. **不许改 `version` 字段**。插件拿版本号当状态键，改了会反复重打补丁 + 反复重启。
-4. **不许把本地改动写进 `lib/core.js`**（342KB，上游几乎天天动）。新功能放 `lib/local/<模块>.js`，
-   上游文件只加一行 import。
+4. **`lib/core.js` 只许存在「有记录、有注释」的 fork 修正，不许随手加新逻辑**（近 400KB 的单文件，
+   上游几乎天天动）。当前允许的两处，全部带 `// 【fork…】` 注释：
+   ① #32/#36 那两条补丁的 `insertProbe`（防二次 apply 叠加）；
+   ② `rollupPatchStatus` 保留「已写入优先于 `drifted`」（上游 1.1.83 起改成 drifted 优先，会让多文件补丁常年假告警）。
+   新功能放**新文件**（`lib/` 下平铺，例如 `lib/rewind.js`、`lib/drill-grant.js` —— **没有 `lib/local/` 这个目录**），
+   `core.js` 里最多加一行 import。每加一处 fork 修正，必须同时登记到 `UPDATE-LOG.md` 附录 G，
+   否则下次 cherry-pick 撞了就没人知道该保留什么。
 5. **不许 `git commit` / `git push` 到 `master` 分支**（`master` 只收原作者代码）；`local` 只有用户
    明确要求时才推。
 6. **不许在会话内试图改名 `app.asar`**：被宿主 + WorkBuddy sidecar 双重持有，报
@@ -1294,14 +1338,17 @@ git -C $src checkout -B local v1.1.73-wyybs
    浪费的是一小时。**不要卡住硬试。**
 7. **不许跳过 §2 直接动手**。用户要的是「先看差异再决定」。
 7.1 **❌ 绝不许在没查 §0.5 的情况下说出「可以升 DSH」「新版 DSH 没问题」这类话。**
-   判定只能依据上游 `dshTarget` + README 兼容矩阵 + release-notes 三处。当前上游 1.1.81
-   **明确不支持 0.2.1-rc.3 及更新**，插件运行时**不会**自己拦（`dshTarget` 只是 `package.json:99`
-   一个元数据字段，代码里零引用）—— 说错一句话，用户就会升上去然后补丁全灭 + 可能起不来。
+   判定只能依据上游 `dshTarget` + README 兼容矩阵 + release-notes 三处。末代上游（1.1.92）
+   三处依据（`dshTarget` / README / release-notes）**只看读数不够，要看它们是否一致**：任何两处打架一律按「不支持」
+   （历史教训：`dshTarget` 改到新 rc 但 README 没改口，是最常见的「假支持」）。插件运行时**不会**自己拦
+   （`dshTarget` 只是 `package.json` 里一个元数据字段，代码里零引用）—— 说错一句话，用户就会升上去然后补丁全灭 + 可能起不来。
 7.2 **不许让用户「先升 DSH 再等适配」**。顺序固定：上游适配 → 我们 port 进 `local` → 自检通过 →
    **助手明确说「可以升了」** → 用户才升 → apply 解包 → 用户手动 swap asar → 复查。
    （§0.5.5 的八步表）
 8. `REPO` 常量（`lib/update.js:12`）仍硬编码 `"YuJunZhiXue/dsh-purge"`，面板上的
    「GitHub」链接与版本列表都指上游。**这是已知未改项，不在更新范围里，不要顺手改。**
+   完整写死点清单（实测 5 处）见 §4.1.2：`package.json` 的 `repository/homepage/bugs`（可改，待办）、
+   `lib/update.js:12`（保留）、`client.js:143/501`（保留）、`lib/redteam/ui.js:360`（保留）。
 9. **不许给「从上游搬来的代码」用 `local:` 前缀**。`local:` = 我们自己的定制（重建时必须手工重做），
    `port:` = 上游代码移植（重建时从目标 ref 自动获得，不重做）。混用会让 `git log --grep='^local:'`
    这份定制清单失真 —— 而它已经是判断「我们改了什么」的唯一可靠手段（§1.3.1）。
@@ -1320,9 +1367,9 @@ git -C $src checkout -B local v1.1.73-wyybs
    宿主对 schema 是硬断言，但 `dsh-agent-preset` 只 `logger.warn` 不崩，表现为「工具悄悄变少」，
    不主动查根本发现不了（`lib/index.js:516` / `:738`）。
 15. **不许不问地址就 cherry-pick**。上游每次动安装/更新路径都会把 `YuJunZhiXue` 写回去
-   （历史上有 `dbaf377`，1.1.80 又新增了 `lib/profile-insert.js` 的 `readPurgeTarball()` fallback）。
-   每次移植完必须跑 §4.1.2 的 `git grep -n 'YuJunZhiXue'` 复查，把运行代码里的写死地址改回 `wyybs`
-   再提交。这类失效是**静默的** —— 装的时候一切正常，等哪天走了 fallback 才会发现钉的是上游。
+   （历史上有 `dbaf377`；1.1.80 那代的 `readPurgeTarball()` fallback 现已从代码里消失，别再去找）。
+   每次移植完必须跑 §4.1.2 的判据命令（带白名单过滤，输出必须为空），把运行代码里**多出来**的写死地址
+   改回 `wyybs` 再提交。这类失效是**静默的** —— 装的时候一切正常，等哪天走了 fallback 才会发现钉的是上游。
 16. **不许用 `--allow-build=…` 解决 `ERR_PNPM_IGNORED_BUILDS`**。本机 pnpm 是 **11.28.5**，
    `--allow-build` 不是它的选项（`[ERROR] Unknown option: 'allow-build'`），
    上游 README 里那串命令照抄必失败。正确做法只改 profile 的
@@ -1333,8 +1380,8 @@ git -C $src checkout -B local v1.1.73-wyybs
    上游 `files[]` 漏了 `skills`（drop-skills 遗留），`pnpm install` 装出来的副本 `skills\` 会是**空目录**
    且**不报任何错**，红队技能静默全丢。`efcc00c` 已补，但下次合上游还会被覆盖。
 18. **不许直接 import 安装副本的 `lib/redteam/tools.js` 做红队自检**。宿主的
-   `@deepseek-ai/dsh-tools` 在 `app.asar` 里，node 解析不进去；rc.3 之后连 `resources\app\`
-   解包目录都没了。必须用 §5.1 的 **stub 宿主 + 切 cwd** 那套。
+   `@deepseek-ai/dsh-tools` 在 `app.asar` 里，node 解析不进去；只有「还没 apply 解包」时才真的没有退路。
+   必须用 §5.1 的 **stub 宿主 + 切 cwd** 那套。
 19. **不许把「`spawn EPERM`」当沙箱配置问题处理**。2026-10-27/28 实测根因是
    **杀毒软件**拦 `CreateProcessAsUserW` 的受限令牌通道。先让用户临时关/加白杀软，
    不要浪费时间去改 AclSandbox 策略、也不要去装 pwsh（装了也不管用）。
@@ -1345,11 +1392,11 @@ git -C $src checkout -B local v1.1.73-wyybs
 
 > **第一件事不是查上游，是查宿主** —— `Test-Path resources\app.asar` 为 True 就说明宿主升级过、
 > 补丁已失效，**让用户手动把 `app.asar` 改名成 `app.asar.bak`**（§4.6.1 四步，别写脚本），
-> 再看 applied 数是否还是 61。宿主没问题才需要关心上游。
+> 再看 `applied` 是否还是**满值**（四项之和等于补丁总数，`pending`/`drifted` 为 0）。宿主没问题才需要关心上游。
 >
-> **第零件事是查「上游支不支持本机宿主版本」**（§0.5）。`dshTarget` 只要还写着 `0.2.1-rc.2`、
-> README 还写着 `rc.3 and newer are not supported`，就**绝对不许升 DSH** —— 插件运行时不校验版本，
-> 会静默加载然后补丁全部匹配不上。**升级 DSH 是我们主动通知用户，不是用户自己决定。**
+> **第零件事是查「上游支不支持本机宿主版本」**（§0.5）。判据是**三处依据一致**，不是某个字段写了什么；
+> 只要 `dshTarget` / README / release-notes 有一处打架，就**绝对不许升 DSH**。
+> 插件运行时不校验版本，会静默加载然后补丁全部匹配不上。**升级 DSH 是我们主动通知用户，不是用户自己决定。**
 >
 > 上游要不要跟：**先按 §1.2.3 的优先级判性质，再用 `lib/core.js` 的 blob 做交叉验证。**
 > blob 不变 ⇒ 补丁规则没动，剩下的只可能是收窄 / 文案 / 文档 —— **一律不跟**；
@@ -1375,10 +1422,13 @@ git -C $src checkout -B local v1.1.73-wyybs
 
 ## 9. 记录去哪看
 
-历史内容全部在 **[`UPDATE-LOG.md`](./UPDATE-LOG.md)**：变更日志（port / local 全表）、上游 1.1.80 / 1.1.81 逐文件评估、已判定「不跟」的上游提交清单、事故复盘（`file:` 不感知变化、`files[]` 吞 skills、`ERR_PNPM_IGNORED_BUILDS`、`spawn EPERM`、rc.3 清空补丁层）、每次巡检的实测数值。
+历史内容全部在 **[`UPDATE-LOG.md`](./UPDATE-LOG.md)**：变更日志（port / local 全表）、上游 1.1.80 / 1.1.81 逐文件评估、已判定「不跟」的上游提交清单、事故复盘（`file:` 不感知变化、`files[]` 吞 skills、`ERR_PNPM_IGNORED_BUILDS`、`spawn EPERM`、rc.3 清空补丁层）。
 
+> **要读数就去 `UPDATE-LOG.md` 附录 I「基线快照」** —— 那是**唯一**记录 HEAD、条数、`applied`、文件数、tag 清单、
+> 上游 `dshTarget` 读数的地方（按日期，新→旧）。本文件不存读数，只存判据与取数方法（§0.B）。
+>
 > **撞冲突先查 `UPDATE-LOG.md` 附录 G「逐文件差异原因速查」**（21 个文件的差异原因 + 处理方式，高发冲突：`core.js` / `net-scope.js` / `package.json`）。
 >
 > **先看 `UPDATE-LOG.md` 附录 F「待办清单」** —— 还没移植的 9 个文件（红队 `store-core` / `tools` 等）与 rc.5 实测都在那张表里，附「为什么不跟 / 动手前提 / 优先级」。动手前先翻一遍，别重复提案。
 
-> 本文件只写**下次还要执行的动作与规范**。任何「某天发生了什么、为什么改」的内容一律追加到 log，不进这里（判据见 §0.1）。
+> 本文件只写**下次还要执行的动作、判据与阈值**。任何「某天发生了什么、为什么改、当时量出来多少」的内容一律追加到 log，不进这里（判据见 §0.1）。
