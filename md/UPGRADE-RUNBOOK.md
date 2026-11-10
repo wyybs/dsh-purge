@@ -11,7 +11,7 @@
 
 | 不许做 | 原因 | 替代做法 |
 |---|---|---|
-| 碰 `D:\Program Files\DeepSeekRuntime`（安装目录名中间**一个空格**，不是 `DeepSeekRuntime`） | 那是老大正在用的环境，写坏了他当天没法干活 | 只在 `<NEWPKG_DIR>` 里解包、改、测 |
+| 碰 `D:\Program Files\DeepSeekRuntime`（安装目录名中间**一个空格**，不是 `DeepSeekRuntime`） | 那是老大正在用的环境，写坏了他当天没法干活 | 只在 `<NEWPKG_DIR>` 里解包、改、测。**只读不算碰**：§1.3 要读它取原始归档、§7 要读它做真机复核，`ls`/`cp`（往外拷）都可以，**只有写入才算碰** |
 | `git checkout` 到别的分支 | `src/lib/core.js`、`src/cordis.patch.yml` 与 `~/.dsh/profiles/desktop/node_modules/dsh-purge/` 下的文件**是同一个 inode（硬链接）**。切分支 = 当场改写运行中插件 | 用 `git update-ref refs/heads/<目标> refs/heads/<源>` 移动指针，不碰工作树 |
 | 在 profile 里 `pnpm install` / 重装插件 | 会让老大那边立即换代码 | 等他自己升级完再动；实在要验证就用干净副本 |
 
@@ -47,10 +47,13 @@ ls -1 "<NEWPKG_DIR>"/deepseek-harness-*.exe
 ```bash
 python - <<'PY'
 import glob
-f = glob.glob(r"<NEWPKG_DIR>/deepseek-harness-*.exe")[0]
-d = open(f, "rb").read(0x20000)
-i = d.find(b"FileVersion")
-print(d[i:i+60] if i >= 0 else "未找到，解包后读 package.json")
+fs = glob.glob(r"<NEWPKG_DIR>/deepseek-harness-*.exe")
+if not fs:
+    print("目录里没找到 deepseek-harness-*.exe，先确认 <NEWPKG_DIR>")
+else:
+    d = open(fs[0], "rb").read(0x20000)
+    i = d.find(b"FileVersion")
+    print(d[i:i+60] if i >= 0 else "未找到，解包后读 package.json")
 PY
 ```
 
@@ -85,11 +88,16 @@ docs: 记录 X.Y.Z 验收数值
 所以每一轮都要留一份原始归档：
 
 ```bash
-# 已打补丁的宿主：只有 app.asar.bak 是原始归档；还没解包时 app.asar 本身就是
-ls -la "<当前安装>/resources/app.asar" "<当前安装>/resources/app.asar.bak"
-mkdir -p "<归档目录>/dsh-baseline/<当前版本>"
-cp "<上一步选中的原始归档>" "<归档目录>/dsh-baseline/<当前版本>/app.asar"
+# 两个文件不会同时存在：没解包时是 app.asar，解过包就只有 app.asar.bak
+ls -la "<当前安装>/resources/app.asar" 2>/dev/null
+ls -la "<当前安装>/resources/app.asar.bak" 2>/dev/null
+# 有 bak 就用 bak，没有才用 asar
+mkdir -p "D:/dsh-baselines/<当前版本>"
+cp "<上一步存在的那一个>" "D:/dsh-baselines/<当前版本>/app.asar"
 ```
+
+`<归档目录>` 建议固定放**仓库外**（如 `D:/dsh-baselines/<版本>/app.asar`）—— 一份 200MB 出头，
+放仓库里会把 git 撑爆，也容易误提交。
 
 下一轮升级时，§4.2 里的 `<旧宿主>` 就用这份归档按 §2 解开，**不要用线上目录**。
 
@@ -155,10 +163,13 @@ console.log("files", c, "skipped", skip);
 
 ```bash
 cd <仓库>/src
-node scripts/port/check-host.mjs --asar "<NEWPKG_DIR>/app/resources/app.asar" | tee baseline.txt
+node scripts/port/check-host.mjs --asar "<NEWPKG_DIR>/app/resources/app.asar" \
+  > "<NEWPKG_DIR>/baseline.txt" 2>&1
+echo "exit=$?"     # 2 = --asar 路径写错；0/1 = 跑完了，看下面的表
+cat "<NEWPKG_DIR>/baseline.txt"
 ```
 
-`tee` 是为了存档 —— §6 汇报要"改前 vs 改后"的数字，别靠记忆。
+存文件是为了 §6 汇报要"改前 vs 改后"的数字，别靠记忆。用 `>` 而不是 `| tee` —— 管道会把退出码换成 `tee` 的 0，刚修好的 exit 2 保护就废了；存到 `<NEWPKG_DIR>` 而不是仓库里，是为了不污染 §9 的 `git status` 空检查。
 
 不用手工解 asar —— 脚本自己会解到临时目录、跑首轮和次轮，跑完自动清。它输出：
 
@@ -289,10 +300,10 @@ node scripts/port/check-host.mjs --asar "<新 asar 路径>"
 
 | # | 判据 | 含义 |
 |---|---|---|
-| 1 | 首轮 `drifted = 0` | pattern 全部对得上新宿主 |
+| 1 | 首轮 `drifted = 0`，且没有 `pattern_not_found` | pattern 全部对得上新宿主（`pattern_not_found` 是 `strictFiles` 补丁的严格版说法，同样算失败） |
 | 2 | 次轮 `drifted = 0` 且 `already == 首轮命中数` | 幂等，没有"只打中一半"的补丁 |
 | 3 | 被改的 **JS 和 YAML** 语法全过 | 补丁不能把宿主写坏（`cordis.patch.yml` 写坏一样起不来） |
-| 4 | **只增不减**：`git diff` 里没有删掉任何 `pattern` / `replace` / `markers` | 功能不缩窄的机器判据 |
+| 4 | **只增不减**：`git diff` 里没有删掉任何 `pattern` / `replace` / `markers`，`cordis.patch.yml` 没有删掉任何 `id:` 条目 | 功能不缩窄的机器判据 |
 
 判据 1/2 还有个前提：**B 段必须真的执行过**。输出里必须出现「解包 N 个文件」那一行 —— 路径写错时脚本会把 B 段跳过、结论写"部分通过"，别当成通过看。
 
@@ -307,32 +318,39 @@ node scripts/port/check-host.mjs --asar "<新 asar 路径>"
 | `drifted` | 文件在、pattern 不中、也没 marker = 官方原文改了 | **是** |
 | `pattern_not_found` | 同 drifted，`strictFiles` 补丁的严格版说法 | **是** |
 
-第 4 条是硬闸门 —— "只追加不替换"这条约定光靠自觉不可靠，用 diff 查：
+第 4 条是硬闸门 —— "只追加不替换"这条约定光靠自觉不可靠，用 diff 查。**两条命令，缺一不可**：
 
 ```bash
-# 合并回 local 之前跑。空输出 = 通过。
-# 只盯 pattern / replace / markers：旧的匹配规则一旦删改，旧宿主的命中集合就变了。
-git diff local..HEAD -- lib/core.js cordis.patch.yml \
-  | grep -E "^-[^-]" | grep -E "pattern|replace|markers"
+# ① lib/core.js：旧的匹配规则不许删改（file: 数组追加和注释行会命中，人工放行）
+git diff local..HEAD -- lib/core.js | grep -E "^-[^-]" | grep -E "pattern|replace|markers"
+
+# ② cordis.patch.yml：条目字段只有 id/name/disabled，上一条的 grep 词表对它永不命中，
+#    所以这里全量列出被删的行，人工逐条过目（条目本来就十几个，一眼看完）
+git diff local..HEAD -- cordis.patch.yml | grep -E "^-[^-]"
 ```
 
 **允许**的删除只有两种：`file:` 数组追加元素（改的是同一行）、注释行。
-**不允许**：任何 `pattern` / `replace` / `markers` 被删或改。真要做破坏性改动，必须在提交信息里写清原因和影响面，并在旧宿主上重测一遍。
+**不允许**：任何 `pattern` / `replace` / `markers` 被删或改；`cordis.patch.yml` 里任何 `id:` 条目被删（那等于撤掉一条限制）。真要做破坏性改动，必须在提交信息里写清原因和影响面，并在旧宿主上重测一遍。
 
-闸门本身有假阳性：注释里出现 `pattern` / `replace` 字样的被删行也会命中。命中后人工核一眼是不是那两种允许情形，别直接当成违规。
+闸门①本身有假阳性：注释里出现 `pattern` / `replace` 字样的被删行也会命中。命中后人工核一眼是不是那两种允许情形，别直接当成违规。
 
 语法检查（补丁会改 40+ 个文件，必须逐个验 —— 改写坏一个就是宿主启动崩溃）。
 
-先备好两份目录：**干净副本** = §2 解出来的 `_dl/asar`；**打完副本** = `--keep` 留下的那个（脚本会打印路径，是 `%TEMP%\dpchk\<6位随机戳>\app`，每次不同，从输出里抄）。两份必须出自同一份 asar，否则 diff 出来的全是噪音。
+先备好两份目录，**两份必须出自同一份 asar**，否则 diff 出来全是噪音：
+
+- **干净副本** = §2 解出来的 `_dl/asar`
+- **打完副本** = `--keep` 跑完后打印的 `asar 解包根` 那一行（形如 `%TEMP%\dpchk\<6位随机戳>\app`）。
+  打印里有两行：第一行是工作目录、第二行才是解包根，**用第二行**。每次戳都不一样，从输出里抄。
 
 ```bash
-# 1) 被改文件清单
+# 1) 被改文件清单（写到 <NEWPKG_DIR>，别落仓库里，否则 §9 的 git status 空检查会撞上）
 diff -rq "<干净副本>/dsh/node_modules/@deepseek-ai" "<打完副本>/dsh/node_modules/@deepseek-ai" \
-  | grep differ | sed 's/.*@deepseek-ai\///; s/ differ//' > dirty.txt
+  | grep differ | sed 's/.*@deepseek-ai\///; s/ differ//' > "<NEWPKG_DIR>/dirty.txt"
 
 # 2) 逐个语法检查：.js 走 ESM（复制成 .mjs 再 --check），.yml 用宿主自带的 yaml 包 parse
 export AI="<打完副本>/dsh/node_modules/@deepseek-ai"
 export YAML_MOD="file:///<打完副本>/dsh/node_modules/yaml/dist/index.js"
+export DIRTY="<NEWPKG_DIR>/dirty.txt"
 node --input-type=module - <<'JS'
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -341,15 +359,19 @@ import path from "node:path";
 const root = process.env.AI;
 const tmp = path.join(os.tmpdir(), "chk.mjs");
 const YAML = (await import(process.env.YAML_MOD)).default;
+const list = process.env.DIRTY || "dirty.txt";
 let bad = 0;
-for (const rel of fs.readFileSync("dirty.txt", "utf8").split("\n").filter(Boolean)) {
+for (const rel of fs.readFileSync(list, "utf8").split("\n").filter(Boolean)) {
   const fp = path.join(root, rel);
   if (rel.endsWith(".js")) {
     fs.copyFileSync(fp, tmp);
     try { execFileSync(process.execPath, ["--check", tmp], { stdio: "pipe" }); }
     catch { bad++; console.log("JS SYNTAX FAIL", rel); }
   } else if (rel.endsWith(".yml") || rel.endsWith(".yaml")) {
-    try { YAML.parse(fs.readFileSync(fp, "utf8"), { logLevel: "silent" }); }
+    // 不要加 { logLevel: "silent" }：它连 YAMLParseError 一起吞掉 —— 未闭合引号、
+    // 未闭合 flow、tab 缩进、重复 key 都会静默返回"修补过"的值，bad 永远是 0。
+    // `!!js` 是宿主自定义 tag，只会打 TAG_RESOLVE_FAILED 警告、不抛错，本来就不用压。
+    try { YAML.parse(fs.readFileSync(fp, "utf8")); }
     catch (e) { bad++; console.log("YAML FAIL", rel, e.message); }
   }
 }
@@ -404,6 +426,9 @@ node scripts/port/check-host.mjs        # 自动探测安装目录，A 段 + B �
 | **7-Zip 版本** | 18.05 精简版不支持 NSIS，报"无法打开" | 用 26.x；或用 `winget download 7zip.7zip` 拿 MSI 再解出 `7z.exe` |
 | **`7z -o` 带空格** | `-o nsis` 会被当成两个参数，解包失败或解到错地方 | `-o` 必须紧贴目录名：`-onsis`、`-o../app` |
 | **`node -` 喂 ESM** | 老版本 node（18/20）把 stdin 当 CommonJS，`import` 直接 SyntaxError；Node 22 有语法检测能兜住，换机器就炸 | 一律写 `node --input-type=module - <<'JS'` |
+| **yaml 的 `logLevel:"silent"`** | 它连 `YAMLParseError` 一起吞：未闭合引号/flow、tab 缩进、重复 key 都静默返回"修补过"的值，语法检查变成永远 `fail 0` | 别加这个选项。`!!js` 只打 `TAG_RESOLVE_FAILED` 警告、不抛错，本来就不用压 |
+| **`\| tee` 吃退出码** | 管道退出码取最后一个命令，`node … \| tee baseline.txt` 的 `$?` 永远是 `tee` 的 0，exit 2 的保护当场失效 | 用 `> baseline.txt 2>&1` 再 `echo $?`，或 `set -o pipefail` |
+| **检查产物落在仓库里** | `baseline.txt` / `dirty.txt` 写进 `src` 根会变成未跟踪文件，撞上 §9 的 `git status --short 必须为空` | 统一输出到 `<NEWPKG_DIR>` |
 | **`--asar` 指错路径** | B 段被跳过、结论写"部分通过"、退出码 0，容易被当成通过 | 现在脚本对"指定了但不存在"直接退出 2；同时看输出里有没有「解包 N 个文件」那行 |
 | **临时目录太深** | 两万个文件解包后最深路径逼近 260 字符，删除/遍历失败 | 用短目录名（`check-host.mjs` 已用 6 位随机戳） |
 
@@ -424,8 +449,9 @@ node scripts/port/check-host.mjs --asar "<path>/app.asar" --keep
 # 仓库自测
 node --test
 
-# 功能不缩窄的机器判据（合并回 local 之前，空输出才算过）
+# 功能不缩窄的机器判据（合并回 local 之前，两条都要空输出）
 git diff local..HEAD -- lib/core.js | grep -E "^-[^-]" | grep -E "pattern|replace|markers"
+git diff local..HEAD -- cordis.patch.yml | grep -E "^-[^-]"
 
 # 分支操作（不碰工作树）
 git status --short                      # 必须为空

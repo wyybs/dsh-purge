@@ -348,7 +348,8 @@ if (!asarPath || !fs.existsSync(asarPath)) {
         log(`  (清理失败：${why}…；目录仍在 ${dir}，手工删掉即可，不影响本次结论)`);
       }
     } else {
-      log(`  已保留解包目录：${dir}`);
+      log(`  已保留：${dir}`);
+      log(`    asar 解包根（当 <打完副本> 用时指这一层）：${appDir}`);
     }
   }
 }
