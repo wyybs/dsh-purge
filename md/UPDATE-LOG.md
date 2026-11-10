@@ -8,6 +8,25 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-10 13:58 0.2.2-rc.1 真机验收通过：68/70 applied，0 pending，0 drifted
+
+宿主 `D:\Program Files\DeepSeekRuntime` 装成 0.2.2-rc.1，插件自己解开 `app.asar`（213,202,918 字节 → `resources\app`），asar 改名 `.bak`，`/purge apply` 落地。
+
+首次状态是 `64/70 applied, 4 drifted`（`#54 #60 #62 #82`）。**四条全是误报**，两轮修复后 `68/70 applied, 0 pending, 0 drifted`，余下两条 `#71`（梁神预设未装）、`#80`（自注入型自标记）为 skipped。
+
+两类误报的根因不同，修法相同（都加 `softSettle`）：
+
+| 补丁 | 根因 | 证据 |
+|---|---|---|
+| `#54` | 同一段交付物文案在 0.2.2 同时存在于 `dsh-client-ui-deliverables` 和新家 `dsh-deliverable-file-references`，旧壳不含目标文案却仍在 file 键里 | 两个文件分别 `hasMarker=false / true` |
+| `#60` | run_code 文案整体搬到 `dsh-tool-executor-ptc`，旧 `dsh-tools/lib/index.js` 还在但无这四句 | 同上 |
+| `#62` | 审批决策搬到 `dsh-tools/lib/pipeline.js`，旧 `lib/index.js`、`lib/types/index.js` 已无这几段 | 同上 |
+| `#82` | 0.2.2 主进程**已无 `DSH_PROFILE` 概念**（main.js 843KB 里 grep 命中 0 次），兜底无对象；旧 pattern 的 region 注释锚点也随打包顺序变成 `mime@4.1.1` 而失配 | `main.js` 全文搜索 |
+
+`filePatchSettled` 对"文件在、pattern 不中、也没 marker"返回 false → 记一次 drifted → 整条拖红（`rollup` 里 drifted 排在 already 之前）。`softSettle` 让这种"这份文件本来就没这段代码"收敛成已完成；首轮干净宿主仍照常匹配（`#54/#60/#62` 在 p4 上第一遍就 applied），不会漏打。
+
+**验收方法要记一笔**：`patchStatus` 在纯 node 下 `detectSurface()` 返回 web，`surfaces:["desktop"]` 的补丁（`#82/#83/#92/#93`）不参与判定，会显示 na/missing_file，**必须带 `DSH_SURFACE=desktop` 才和 UI 一致**。另外双跑对比也不能取"两次里最好的那个"——第一遍 applied、第二遍 drifted 才是最该抓的信号（`#17` 当初就是这么挖出来的）。
+
 ### 2026-11-10 11:30 适配宿主 0.2.2-rc.1（分支 `feat/dsh-0.2.2-rc.1`）
 
 > 宿主发到 **0.2.2-rc.1**（安装包 `deepseek-harness-0.2.2-rc.1-win-x64.exe`，NSIS，内含 `app-64.7z`）。
