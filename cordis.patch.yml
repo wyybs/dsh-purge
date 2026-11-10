@@ -32,6 +32,24 @@
   name: '@deepseek-ai/dsh-plugin-package-inventory-deepseek'
   disabled: true
 
+# 0.2.2 自带的产品埋点。desktop profile 下 `disabled: profileContext.name !== 'desktop'`
+# 求值为 false = 启用；endpoint 走 zod 默认值
+# https://dsh-otel-collector.deepseeksvc.com/v1/logs（环境变量没设也是这个地址）。
+# 关掉只影响 UI 行为统计，本地功能一律不受影响。
+- id: desktop-product-telemetry
+  name: '@deepseek-ai/dsh-host-product-telemetry-otel'
+  disabled: true
+
+- id: product-analytics
+  name: '@deepseek-ai/dsh-client-product-analytics'
+  disabled: true
+
+# 会话日志遥测默认 mode=FEEDBACK_ONLY：只有你自己点「反馈」才上传，日常活动不采集。
+# 想连反馈通道一起断，把下面三行的注释去掉；代价是官方排障时拿不到你的会话前缀。
+# - id: session-telemetry-otel
+#   name: '@deepseek-ai/dsh-session-telemetry-otel'
+#   disabled: true
+
 - id: system-prompt
   config:
     includeHarnessIdentity: false
