@@ -8,6 +8,31 @@
 
 ## 时间线（新→旧）
 
+### 2026-11-12 09:55 指南按 0.2.2 现状校形：4 处判据从「独立拷贝时代」改成「link/junction 时代」
+
+> 巡检发现 3 条判据已经被现状打破（不是数值过期）：安装副本变 junction、依赖变 `link:`、
+> 宿主跑在 `0.2.2-rc.1` 而闸门还在等一个已经死掉的上游「改口」。不改这三条，下次体检必然假警。
+
+- **§0.A 结构判据**：宿主依赖从「必须 `file:$SRC`」改成「`link:` / `file:` 都合规，只要指向 `$SRC`」；
+  安装副本形态从「`LinkType` 必须为空」改成「junction（Target=`$SRC`）或独立拷贝，二选一」；
+  `allowBuilds` 注明键前缀随形态变（`@link:` / `@file:`）。
+- **§1.3 D 逐文件比对**：加**形态前置判断** —— junction 下脚本恒报 `0 差异`（比的是源码它自己），
+  所以先判 `LinkType`：junction 只看 `Target`，独立拷贝才跑 SHA 比对。
+- **§4.4 装进宿主**：加了形态对照表（`link:` 改源码即时生效、只需重启；`file:` 才要删副本重装），
+  脚本里先判形态再决定删不删；`allowBuilds` 示例改成 `@link:` 并在注释里写「二选一」。
+- **禁区 13 / 新增 13.1**：13 明确「只对 `file:` 成立」；13.1 反过来警告 **junction 下
+  `Remove-Item node_modules\dsh-purge` 会顺着联接删掉源码**。
+- **§0.5 闸门**：明写「上游已死 ⇒ 三证据冻结 ⇒『等上游宣布支持』这条路作废」，
+  判据换成「自己 port + 四条验收（首轮 drift=0 / 二次幂等 / 真机 pending=0 / 64 工具+测试）」；
+  §0.5.5 保留顺序与交接点，操作细节全部指向 `md/UPGRADE-RUNBOOK.md`；§0.5.7 的三种答法按现状重写
+  （常态是「我还没适配」，不再说「上游不支持」这种已经没有意义的话）。
+- 附录 I 补 **0.2.2-rc.1 快照**（之前最后一条还是 11-10 的 rc.2 数据，落后两个版本）。
+
+**状态**：补丁层 78/0/6/1/1（和 86），`drifted=0`，`app.asar`=False，宿主 `0.2.2-rc.1`。
+本次只改文档，未动代码。
+
+---
+
 ### 2026-11-10 14:30 上线 `scripts/port/check-host.mjs`：一条命令跑完三段复验
 
 > 今天两小时里有一半时间耗在"状态页红了几条、到底真打上没有"。三种误报（旧壳拖红、定义域消失、
@@ -682,6 +707,37 @@ node scripts/port/check-host.mjs --surface web
 > `UPDATE-GUIDE.md` 只写判据与流程，**不写读数**。凡 HEAD、文件数、`applied` 数、条数、字节数、宿主 `FileVersion`、
 > 上游 `dshTarget` 读数、tag 清单 —— 一律记在这一节。
 > 规则：**每次巡检/每次 apply 后追加一段**（新→旧），不修改历史段；`UPDATE-GUIDE.md` §0.B 有取数脚本。
+
+### 2026-11-12 09:50（宿主已升 0.2.2-rc.1，安装形态改为 junction）
+
+> 这一版与上一条（11-10 10:44，rc.2 阶段）差异很大 —— 宿主换代 + 安装形态换了。
+> 0.2.2 适配/验收的过程数据在时间线「2026-11-10 11:30 / 13:58 / 14:30」三条里，这里只记快照。
+
+| 项 | 值 | 取法 |
+|---|---|---|
+| `local` HEAD | `2bb5226`（`fix: 第二轮审查的 2 条返工 + 8 条新问题`） | `git rev-parse --short local` |
+| `origin/local` | `0f0356a` —— **本地领先 11 条（含整条 0.2.2 适配链，尚未推）** | `git rev-list --count origin/local..local` |
+| 工作区 | clean | `git status --porcelain` |
+| `port:` 链 | **24 条** | `git rev-list --count --grep='^port:' local` |
+| `local:` 链 | **14 条** | 同上（`^local:`） |
+| 补丁 id 总数 | **86** | `grep -cE '^\s+id: [0-9]+' lib/core.js` |
+| 补丁状态（CLI，patch id 口径） | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file**，`drifted=0` | `bin/dsh-purge.js --status` |
+| 预期异常项 | `#80` skipped、`#71` missing_file（梁神预设未装） | 同上 |
+| 宿主版本 | **`0.2.2-rc.1`**（2026-11-10 从 rc.2 升上来的） | 主程序 `FileVersion` |
+| `app.asar` | False（`.bak` = True） | `Test-Path` |
+| `app-update.yml` | False（`.disabled` = True） | `Test-Path` |
+| `resources\app` | **22,167 文件**（rc.2 时是 18,370） | `Get-ChildItem -Recurse -File` |
+| 安装形态 | **Junction → `D:\Workspaces\fzp\ai_test\dsh-purge\src`**（不再是独立拷贝，逐文件比对失去意义） | `(Get-Item $inst).LinkType/Target` |
+| 依赖 spec | **`link:D:/…/dsh-purge/src`**（原来是 `file:`） | profile `package.json` |
+| `allowBuilds` | 2 行：裸名 + `"dsh-purge@link:…"`（键前缀随形态变） | `pnpm-workspace.yaml` |
+| 源码 / `version` | `1.1.73`（永不改） | `package.json` |
+| 本机 `dshTarget` | `0.2.1-rc.2`；`dshTargets` = [`0.2.1-rc.2`, `0.2.1-rc.5`, **`0.2.2-rc.1`**] | `package.json` |
+| 上游死活 | 两地址仍 `exit 128 Repository not found` | §0.0.1 探活 |
+| 上游末代 | `fc6e787` = 1.1.92，tag `final-upstream-1.1.92`（冻结） | `git rev-parse` |
+
+**结论行**：补丁层自洽（78+6+1+1 = 86，`drifted=0`，`asar` 已改名），宿主已跑在新版本上；
+但**上游闸门已失效**（上游死了，三证据冻结，永远「不支持任何新 rc」），现行判据改为
+「自己 port + runbook 四条验收」，详见 `UPDATE-GUIDE.md` §0.5 与 `md/UPGRADE-RUNBOOK.md`。
 
 ### 2026-11-10 10:44（文档审计那一轮，巡检实拍）
 

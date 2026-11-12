@@ -41,7 +41,7 @@
 | # | 动作 | 依据 / 命令 | 说明 |
 |---|---|---|---|
 | 1 | **基线核对** | §0.A 结构判据逐项跑命令（分支 / 工作区 / 副本 `DIFF=0` / `app.asar`=False / `app-update.yml`=False / `allowBuilds` 2 行 + §0.B 取快照），再跟 **`UPDATE-LOG.md` 附录 I 最后一条快照**比 | 有偏差先记下来，**仍然继续走完**，最后单列「基线异常」，并**顺手往 log 追加一条新快照**。⚠️ 判基线只认 CLI `--status` 的 patch id 口径；GUI 的 `/dsh-purge/status` 是 rollup 口径，只作展示 |
-| 2 | **宿主闸门** | §0.5.3 三证据（`dshTarget` / README 矩阵 / release-notes） | 不支持就明写「**不能升 DSH**」并给原话依据 |
+| 2 | **宿主闸门** | §0.5.1 的四条验收（首轮 `drifted=0` / 二次 apply 幂等 / 真机 `pending=0` / 64 工具 + 测试）；上游复活时才加 §0.5.3 的三证据 | 没验完就明写「**还不能升**」；验完才说「可以升」+ 升完三步 |
 | 3 | **探测上游死活** | §0.0.1 的两地址探测（`YuJunZhiXue` + `HunYiSage`，**必须先跑，不许直接 fetch**） | 上游 2026-11-06 起已消失；探测结果要写进汇报，见 §0.0.1 表 |
 | 4 | **拉上游 / 复用镜像** | 探测可达 → `git -C $src fetch upstream --tags --prune`；**不可达 → 跳过 fetch，直接用 `final-upstream-1.1.92` 标签当 `BASE_REF`** | fetch 128 不是故障，是既定状态；别拿旧数据冒充「上游没动静」 |
 | 4b | **对齐镜像 / 探测复活** | §1.1：能 ff 就 ff；不能 ff 就先打 `upstream-mirror-backup-<日期>` tag 再 `branch -f` 并 push。**上游复活时**才做这一步 | **只动 `upstream-mirror`，绝不动 `local`** |
@@ -172,10 +172,10 @@ HEAD、文件数、applied 数、tag 清单、宿主版本这些每 apply 一次
 | 分支职责 | 见 §1.1 末 | `master` 存档、`upstream-mirror` 只读镜像、`local` 唯一活分支 |
 | 上游与 fork 关系 | `git -C $src merge-base local upstream-mirror` | **空**（无共同祖先 ⇒ 只能 cherry-pick / 重建，不能 merge） |
 | 镜像冻结 | `git -C $src rev-parse upstream-mirror final-upstream-1.1.92` | 两点相同 |
-| 宿主依赖 | profile `package.json` 的 `dependencies.'dsh-purge'` | `file:$SRC`（不是 registry 版本、不是 tarball URL） |
-| 安装副本形态 | `(Get-Item $inst).LinkType` | 空（独立拷贝，不是 junction） |
-| 副本一致性 | §1.3 D 的逐文件 SHA 脚本 | **`DIFF=0`**；`MISSING` 只能是「打包白名单外」的文件（见下） |
-| `allowBuilds` | profile `pnpm-workspace.yaml` 的 `allowBuilds:` | **恰好 2 行**：裸包名 + 带引号的 `file:` 键 |
+| 宿主依赖 | profile `package.json` 的 `dependencies.'dsh-purge'` | 指向 `$SRC`：**`link:$SRC`（junction，推荐）或 `file:$SRC`（独立拷贝）都合规**；绝不许是 registry 版本号或 tarball URL |
+| 安装副本形态 | `(Get-Item $inst) \| Select-Object LinkType,Target` | **两种都合规**：① `LinkType=Junction` 且 `Target` = `$SRC`；② `LinkType` 为空（独立拷贝）。**判据是「它指向 `$SRC` 还是指向别处」**，不是「必须独立」 |
+| 副本一致性 | 形态①（junction）：**跳过逐文件比对**（永远 `0/0`，见 §1.3 D）；形态②（独立拷贝）：跑 §1.3 D 的 SHA 脚本 | 形态①看 `Target` = `$SRC`；形态②要 **`DIFF=0`**，`MISSING` 只能是「打包白名单外」的文件（见下） |
+| `allowBuilds` | profile `pnpm-workspace.yaml` 的 `allowBuilds:` | **恰好 2 行**：裸包名 + 带引号的来源键。**键前缀跟着安装形态走**：junction 是 `"dsh-purge@link:…"`，独立拷贝是 `"dsh-purge@file:…"` |
 | 版本号 | `src/package.json` 的 `version` | **等于 fork 点那版，永不改**（禁区 3） |
 | **`app.asar`** | `Test-Path <DSH_ROOT>\resources\app.asar` | **False**（已改名 `.bak`） |
 | **`app-update.yml`** | `Test-Path <DSH_ROOT>\resources\app-update.yml` | **False**（应已 `.disabled`） |
@@ -212,8 +212,10 @@ foreach($r in @('local','origin/local','upstream-mirror')){ "{0,-16} {1}" -f $r,
 "update.yml: " + (Test-Path -LiteralPath (Join-Path $base 'resources\app-update.yml'))
 "app 文件数: " + (Get-ChildItem -LiteralPath (Join-Path $base 'resources\app') -Recurse -File).Count
 
-# ③ 副本侧快照（逐文件比对用 §1.3 D，这里只要计数）
-"副本文件: " + (Get-ChildItem $inst -Recurse -File -Force).Count
+# ③ 副本侧快照（先记形态，再记数；junction 形态下「文件数」等于源码文件数）
+$i = Get-Item -LiteralPath $inst -Force
+"副本形态: " + ($(if($i.LinkType){$i.LinkType + " -> " + ($i.Target -join ',')}else{"独立拷贝"}))
+"副本文件: " + (Get-ChildItem -LiteralPath $inst -Recurse -File -Force).Count
 "skills  : " + (Get-ChildItem (Join-Path $inst 'skills') -Recurse -File).Count
 
 # ④ 补丁状态（**判基线只认这个口径**，别用 GUI 的 rollup 数字）
@@ -246,15 +248,27 @@ node "$src\bin\dsh-purge.js" --status
 ## 0.5 ⛔ 宿主版本闸门（**优先级最高，先读这一节**）
 
 > **一句话**：`dsh-purge` 是**贴着宿主源码打补丁**的插件。宿主换一个 rc，补丁匹配点就可能全消失。
-> **所以「升级 DSH」这个动作，只能在上游明确支持之后做**，而且要由助手先确认、先 port、再通知用户。
+> **所以「升级 DSH」只能在我们自己完成适配并验收之后做** —— 由助手先 port、先验，再通知用户。
+
+> ⚠️ **闸门的依据已经变了（2026-11-10 之后）**：上游仓库已消失（两地址 404），`dshTarget` / README / release-notes
+> 三处证据**永远冻结在 1.1.92 那一刻**，再也不可能「改口说支持新 rc」。
+> **所以「等上游宣布支持」这条路已经作废** —— 继续照 §0.5.2 的三证据判据读，只会得出「永远不支持任何新宿主」，
+> 而本机实际上已经跑在比它更新的 rc 上。
+>
+> **现行判据（取代三证据）**：**我们自己 port 完 + 四条验收全过 = 可以升**。
+> 完整流程、四类失配怎么重锚、四条验收判据、坑清单 —— **全部在 [`UPGRADE-RUNBOOK.md`](./UPGRADE-RUNBOOK.md)**，
+> 本节只保留「什么时候允许动手」这一层判断，操作细节不再在这里重复。
 
 ### 0.5.1 铁律（写给人也写给助手）
 
 1. **用户不许自己升 DSH**（关掉自动更新、别点升级、别装新版安装包）。想升就一句话：
-   「**上游支持新版 DSH 了吗？**」—— 由助手去查。
-2. **助手不许在没查上游的情况下说「可以升」**。判断依据只有三个，缺一不可：
-   ① 上游 `package.json` 的 `dshTarget`；② 上游 README 的兼容矩阵；③ 上游 release-notes 里关于 rc 的原话。
-3. **顺序永远是**：上游发版 → 助手把代码 port 进 `local` → 助手装好并自检 → **助手明确说「可以升了」** → 用户才升 DSH。
+   「**这个新版你能适配吗？**」—— 由助手去跑 runbook。
+2. **助手不许在没跑 runbook 的情况下说「可以升」**。判据从「上游三证据」换成下面的**四条**（缺一不可）：
+   ① 干净副本上首轮 `apply` 后 `drifted = 0`；② **二次 apply 幂等**（`already` 等于首轮命中数）；
+   ③ 真机（`DSH_SURFACE=desktop`）状态页 `pending = 0`、`drifted = 0`；
+   ④ 红队 64 工具自检通过、`node --test` 全过。
+   > 三证据只在「上游复活」时才有意义：那时回到 §0.5.2 先判上游，再跑 runbook。
+3. **顺序永远是**：宿主出新包 → 助手照 runbook 适配 → 助手验完四条 → **助手明确说「可以升了」** → 用户才升。
    反过来做（用户先升、助手后补）会经历一段「补丁全灭 + 可能起不来」的空窗期，2026-10-27 已经踩过一次。
 4. 升 DSH 之后**必须重走一遍** `/purge apply` 解包 + 用户手动改名 `app.asar` → `app.asar.bak`（§4.6.1）。
    这不是可选步骤 —— 宿主的升级程序会把 `resources\app\` 整个删掉、把 `app.asar` 放回来。
@@ -268,7 +282,7 @@ node "$src\bin\dsh-purge.js" --status
 
 | 情况 | 结论 |
 |---|---|
-| 三处都说支持某个 rc | 才进 §0.5.5 升级流程（且必须是我们已 port 并自检过的那个 rc） |
+| 三处都说支持某个 rc | 才进 §0.5.5 升级流程（且必须是我们已 port 并自检过的那个 rc）。**上游已死时这条永远不成立**，走 `UPGRADE-RUNBOOK.md` |
 | `dshTarget` 写了新版，但 README 的 not-supported 没改（或反之） | **不支持**。这是最常见的一种「假支持」—— 只看 `dshTarget` 会误判 |
 | release-notes 只是说「某些补丁在新 rc 上也能命中」 | 那是「部分可用」，**不等于支持**，不能据此放行 |
 | 上游 README 明确写「rc.N 及更新不支持」 | 除非它改口，否则**永远不支持**，无论 `dshTarget` 写什么 |
@@ -316,9 +330,9 @@ git -C $src show "${BASE}:release-notes.md" |
 
 判定（照 §0.5.2 那条判据走，不认「看起来像支持」）：
 
-- **三处一致说支持** → 才算「上游已支持」，进 §0.5.5。**必须三处一致**，少一处都不行。
-- **`dshTarget` 改了、README 没改（或反之）** → **不许升**。汇报原话：「上游代码层把目标改到了 `<rc>`，
-  但公开声明仍是 `not supported`，两边打架，按不支持处理。」
+- **三处一致说支持** → 才算「上游已支持」；但这只是**必要条件**，还得跑完 `UPGRADE-RUNBOOK.md` 的四条验收才能说「可以升」。
+  ⚠️ **上游已消失，三处读数冻结，这条分支实际上不会触发** —— 保留它只为「上游哪天复活」。
+- **`dshTarget` 改了、README 没改（或反之）** → 按「不支持」处理（上游活着的年代适用）。
 - **README 改口了、`dshTarget` 还是旧的** → 同样按「不支持」，等上游把两处对齐。
 - **release-notes 只说「某几个补丁在新 rc 上能命中」** → 那是部分可用，**不构成支持**。
 - 结论一句话给用户：**能升 / 不能升**，加上三处依据的**本轮读数**（读数取自命令输出，别抄文档）。
@@ -332,15 +346,15 @@ git -C $src show "${BASE}:release-notes.md" |
 > 详细的「升级副作用」实证（`app.asar` 被放回、`resources\app\` 被删、连 `.bak` 被清）
 > 见 `UPDATE-LOG.md` 附录 D5。
 
-### 0.5.5 上游支持之后：从「上游发版」到「用户升 DSH」的完整顺序
+### 0.5.5 从「宿主出新包」到「用户升 DSH」的顺序
 
-**助手做 ①→④，用户做 ⑤→⑦。**
+**适配阶段（①→④）的全部操作细节在 [`UPGRADE-RUNBOOK.md`](./UPGRADE-RUNBOOK.md)**，本节只说顺序和交接点，不重复命令。
 
 | # | 谁 | 动作 | 完成标志 |
 |---|---|---|---|
-| ① | 助手 | 确认上游已支持新版 DSH（§0.5.3 三处依据一致） | 汇报「上游 X.Y.Z 适配 DSH A.B.C」 |
-| ② | 助手 | 按 §1.5 判断 `lib/core.js` blob 变没变 —— **宿主大版本变了，core.js 一定变，必须跟** | 拿到要 cherry-pick 的提交清单 |
-| ③ | 助手 | 按 §4.1 走 `cherry-pick -x` → 前缀 `port:` → §4.4 删副本重装 → §5 + §5.1 自检 | 64 工具自检 OK、`node --test` 全过 |
+| ① | 助手 | 确认有新版宿主（安装包 / 官方提要），**先开分支**（runbook §1.2） | 分支名 `feat/dsh-<版本>` |
+| ② | 助手 | 按 runbook 解包到隔离区、跑基线、列出要重锚的补丁（runbook §2–§3） | 拿到失配清单（按四类对号） |
+| ③ | 助手 | 重锚 + 验证四条判据（runbook §4–§5）；**旧 pattern 一字不许删改** | 首轮 `drifted=0` + 二次 apply 幂等 + 真机 `pending=0` + 64 工具 OK |
 | ④ | 助手 | **明确通知用户**：「`local` 已适配 DSH A.B.C，可以升宿主了。升完要做 ⑤⑥⑦」 | 用户收到这句话 |
 | ⑤ | 用户 | 装新版 DSH 安装包 / 打开自动更新让它升 | `FileVersion` 变成 A.B.C |
 | ⑥ | 用户 | 打开宿主 → 应用内 `/purge apply`（或 GUI 面板 Apply）重新解包 | `unpacked_asar:true` |
@@ -383,13 +397,15 @@ foreach($p in $ports){
 
 ### 0.5.7 「能不能升」的三种答法（照抄，不许混）
 
+> 上游已死，**日常只会遇到下面第 1 和第 3 种**；第 2 种只在「上游复活」时才用得上。
+
 | 情况 | 回答要点 |
 |---|---|
-| 上游还不支持 | 「**还不能升。**」+ 上游 `dshTarget` 现值 + README 的 not-supported 原话 |
-| 上游刚支持、还没 port | 「**上游已支持，但我还没 port。** 现在升会补丁全灭，等我一轮。」 |
-| 上游支持 + 已 port + 自检过 | 「**可以升了。**」+ 升完三步：`/purge apply` → 完全退出宿主与 WorkBuddy → 手动把 `app.asar` 改名 `.bak` |
+| **还没适配**（常态） | 「**还不能升。**这个版本我还没跑完适配，现在升会补丁全灭。等我一轮。」（不要说「上游不支持」—— 上游已经没了，这话没有意义） |
+| 上游刚宣布支持、我们还没 port（仅复活场景） | 「**上游已支持，但我还没 port。** 现在升会补丁全灭，等我一轮。」 |
+| 已 port + 四条验收全过 | 「**可以升了。**」+ 升完三步：`/purge apply` → 完全退出宿主与 WorkBuddy → 手动把 `app.asar` 改名 `.bak` |
 
-> 说「可以升了」之前，§0.5.5 的 ①→④ 必须全做完。
+> 说「可以升了」之前，`UPGRADE-RUNBOOK.md` 的四条验收（首轮 drift=0 / 二次幂等 / 真机 pending=0 / 64 工具 + 测试全过）必须全绿。
 
 ---
 
@@ -625,11 +641,24 @@ git -C $src log --oneline local..<新ref>
 > 若你只想看上游在两个版本之间改了什么（不含我们的定制），才用 `master → <新ref>`，
 > 但那只是「性质参考」，不是工作量。
 
-**D. 存档版和现装版有没有漂移（重要！`file:` 是独立拷贝）**
+**D. 存档版和现装版有没有漂移（**只对「独立拷贝」形态有意义**）**
+
+> ⚠️ **先判形态，再决定跑不跑**。当前本机是 **junction**（`node_modules\dsh-purge` → `$SRC`），
+> 这时下面的脚本会**恒报 `0 差异`** —— 因为它比的其实是源码和它自己。junction 形态下这一项**不看内容、看指向**：
+>
+> ```powershell
+> $i = Get-Item '<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge' -Force
+> "形态: $($i.LinkType)  指向: $($i.Target)"
+> # 合格 = LinkType=Junction 且 Target = $SRC（改源码立即生效，无需重装）
+> ```
+>
+> 只有 **`LinkType` 为空**（`file:` 独立拷贝，历史形态）时才跑下面这段：
 
 ```powershell
 $src='$SRC'
 $inst='<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge'
+$i = Get-Item $inst -Force
+if ($i.LinkType) { "跳过：这是 $($i.LinkType) 形态，指向 $($i.Target)，逐文件比对无意义" ; return }
 $diff=0
 Get-ChildItem $src -Recurse -File -Force | Where-Object { $_.FullName -notmatch '\\\.git\\' } | ForEach-Object {
   $rel = $_.FullName.Substring($src.Length+1)
@@ -995,9 +1024,20 @@ git -C $src tag --list "v*-wyybs"
 直接改文件 → 走 §5 的同步与重启。不需要碰 git 历史，但**要提交**，否则下次 `pnpm install` 前
 若有人 `git checkout` 就会被抹掉。
 
-### 4.4 装进宿主（任何路线都必须做这一步）
+### 4.4 装进宿主（**先判形态**：`link:` 不用重装，`file:` 才要）
 
-`file:` 是**独立拷贝**，改源码不等于宿主生效。
+**两种安装形态，做法完全不同**：
+
+| 形态 | 判定 | 改源码后怎么生效 | 本节是否适用 |
+|---|---|---|---|
+| **`link:`（junction，当前本机）** | `(Get-Item $inst).LinkType` = `Junction`，`Target` = `$SRC` | **立即生效**（目录就是源码），只需**重启宿主**加载新代码 | **不适用**，跳过 ①②，直接重启 |
+| **`file:`（独立拷贝，历史形态）** | `LinkType` 为空 | 要删副本重装（下面三条硬规则） | 适用 |
+
+> 怎么切形态：profile `package.json` 的 `dependencies.'dsh-purge'` 写 `link:$SRC` 或 `file:$SRC`，
+> 然后 `pnpm install`。**`link:` 的好处是不用反复删装、也不会出现「install exit 0 但副本还是旧文件」（D1）**；
+> 代价是安装副本与源码同体，`Remove-Item` 副本等于删源码 —— 见禁区 13.1。
+
+`file:` 是独立拷贝，改源码不等于宿主生效。**下面只对 `file:` 成立**：
 
 **三条硬规则**（踩坑经过见 `UPDATE-LOG.md` 附录 D）：
 
@@ -1008,6 +1048,8 @@ git -C $src tag --list "v*-wyybs"
 ```powershell
 # ① 删掉旧的安装副本（file: 依赖不感知内容变化）
 $inst = '<USERPROFILE>\.dsh\profiles\desktop\node_modules\dsh-purge'
+$i = Get-Item $inst -Force -ErrorAction SilentlyContinue
+if ($i.LinkType) { "跳过：$($i.LinkType) 形态 → $($i.Target)，改源码已即时生效，重启宿主即可" ; return }
 if (Test-Path $inst) { Remove-Item -LiteralPath $inst -Recurse -Force; "已移除旧副本" }
 
 # ② 重装
@@ -1021,12 +1063,14 @@ cd <USERPROFILE>\.dsh\profiles\desktop
 **若出现 `ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY` / `no entry for 'dsh-purge@…'`**：
 先 `pnpm install --lockfile-only` 重生成 lock，再装一次；仍失败则备份并删 `pnpm-lock.yaml` 后重装。
 
-**`allowBuilds` 必须是这两行**（含 `:` 的键加双引号；`e499e03` 起由插件自动维护并自愈）：
+**`allowBuilds` 必须是两行**（含 `:` 的键加双引号；`e499e03` 起由插件自动维护并自愈）。
+**第二行的前缀必须与安装形态一致**，写错就会掉进 `ignoredBuilds`：
 
 ```yaml
 allowBuilds:
   dsh-purge: true
-  "dsh-purge@file:$SRC": true
+  "dsh-purge@link:$SRC": true     # junction 形态（当前本机）
+  # 或 "dsh-purge@file:$SRC": true  # 独立拷贝形态，二选一，不是两行都写
 ```
 
 > **不要再写 `dsh-purge@https://…` 那行**：pnpm 11 会把 URL 当版本联合解析，直接
@@ -1337,11 +1381,11 @@ git -C $src checkout -B local v1.1.73-wyybs
    本项目的经验：用户十秒能做完的事（改名、退出 WorkBuddy、重启机器），我写三个脚本各失败一次，
    浪费的是一小时。**不要卡住硬试。**
 7. **不许跳过 §2 直接动手**。用户要的是「先看差异再决定」。
-7.1 **❌ 绝不许在没查 §0.5 的情况下说出「可以升 DSH」「新版 DSH 没问题」这类话。**
-   判定只能依据上游 `dshTarget` + README 兼容矩阵 + release-notes 三处。末代上游（1.1.92）
-   三处依据（`dshTarget` / README / release-notes）**只看读数不够，要看它们是否一致**：任何两处打架一律按「不支持」
-   （历史教训：`dshTarget` 改到新 rc 但 README 没改口，是最常见的「假支持」）。插件运行时**不会**自己拦
-   （`dshTarget` 只是 `package.json` 里一个元数据字段，代码里零引用）—— 说错一句话，用户就会升上去然后补丁全灭 + 可能起不来。
+7.1 **❌ 绝不许在没跑完 §0.5 判据的情况下说出「可以升 DSH」「新版 DSH 没问题」这类话。**
+   现行判据是 `UPGRADE-RUNBOOK.md` 的**四条验收**（首轮 `drifted=0` / 二次 apply 幂等 / 真机 `pending=0` /
+   64 工具 + 测试全过）；上游三证据只在**上游复活**时才作为前置条件（现在它冻结在 1.1.92，永远说「不支持」，
+   拿它当判据会得出「永远不许升」）。插件运行时**不会**自己拦（`dshTarget` 只是 `package.json` 里一个元数据字段，
+   代码里零引用）—— 说错一句话，用户就会升上去然后补丁全灭 + 可能起不来。
 7.2 **不许让用户「先升 DSH 再等适配」**。顺序固定：上游适配 → 我们 port 进 `local` → 自检通过 →
    **助手明确说「可以升了」** → 用户才升 → apply 解包 → 用户手动 swap asar → 复查。
    （§0.5.5 的八步表）
@@ -1360,9 +1404,13 @@ git -C $src checkout -B local v1.1.73-wyybs
 12. **不许把 `master` 重置成 `upstream/master`**。两者**无共同祖先**，重置会丢 238 个提交、
    89 个文件（88 个 `skills/` + 1 个 `scripts/`），并让 `local` 整条链悬空。
    要跟上游就更新 `upstream-mirror`（§1.1），要拿上游代码就在 `local` 上 `port:` 提交。
-13. **不许只跑 `pnpm install` 就以为装好了**。`file:` 依赖**不感知源码内容变化**，必须
-   先 `Remove-Item node_modules\dsh-purge -Recurse -Force` 再 install，装完比对 SHA256（§4.4）。
+13. **不许只跑 `pnpm install` 就以为装好了 —— 这条只对 `file:`（独立拷贝）成立**。`file:` 依赖
+   **不感知源码内容变化**，必须先 `Remove-Item node_modules\dsh-purge -Recurse -Force` 再 install，装完比对 SHA256（§4.4）。
    这个坑实测踩过：install exit 0、输出正常，但副本里还是旧文件（见 `UPDATE-LOG.md` 附录 D1）。
+13.1 **`link:`（junction）形态下反过来：不许删「安装副本」**。它就是个指向 `$SRC` 的目录联接，
+   `Remove-Item node_modules\dsh-purge -Recurse -Force` 会**顺着联接把源码删掉**。
+   这种形态下改源码即时生效，只需**重启宿主**；要换回独立拷贝，先改 `dependencies` 的 spec 再 `pnpm install`。
+   判形态：`(Get-Item $inst).LinkType` 为 `Junction` 就是 link 形态。
 14. **不许跳过 §5.1 的红队自检**。动过 `lib/redteam/**` 或 `tools.js` 就必须跑那个 64 工具脚本。
    宿主对 schema 是硬断言，但 `dsh-agent-preset` 只 `logger.warn` 不崩，表现为「工具悄悄变少」，
    不主动查根本发现不了（`lib/index.js:516` / `:738`）。
@@ -1394,8 +1442,9 @@ git -C $src checkout -B local v1.1.73-wyybs
 > 补丁已失效，**让用户手动把 `app.asar` 改名成 `app.asar.bak`**（§4.6.1 四步，别写脚本），
 > 再看 `applied` 是否还是**满值**（四项之和等于补丁总数，`pending`/`drifted` 为 0）。宿主没问题才需要关心上游。
 >
-> **第零件事是查「上游支不支持本机宿主版本」**（§0.5）。判据是**三处依据一致**，不是某个字段写了什么；
-> 只要 `dshTarget` / README / release-notes 有一处打架，就**绝对不许升 DSH**。
+> **第零件事是查「这个新版宿主我们适配了没」**（§0.5）。判据是 `UPGRADE-RUNBOOK.md` 的**四条验收全绿**
+> （首轮 `drifted=0` / 二次 apply 幂等 / 真机 `pending=0` / 64 工具 + 测试全过）。
+> 上游三证据只在**上游复活**时才是前置条件 —— 它现在冻结在 1.1.92，永远说「不支持」。
 > 插件运行时不校验版本，会静默加载然后补丁全部匹配不上。**升级 DSH 是我们主动通知用户，不是用户自己决定。**
 >
 > 上游要不要跟：**先按 §1.2.3 的优先级判性质，再用 `lib/core.js` 的 blob 做交叉验证。**
