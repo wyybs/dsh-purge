@@ -708,6 +708,21 @@ node scripts/port/check-host.mjs --surface web
 > 上游 `dshTarget` 读数、tag 清单 —— 一律记在这一节。
 > 规则：**每次巡检/每次 apply 后追加一段**（新→旧），不修改历史段；`UPDATE-GUIDE.md` §0.B 有取数脚本。
 
+### 2026-11-13 09:52（巡检：无实质变化，只补两条上一版没记的自有提交）
+
+| 项 | 值 |
+|---|---|
+| `local` HEAD | `908eb69`（= `origin/local`，已同步、工作区 clean） |
+| `local:` 链 | **15 条**（上一条记的 14 是提交前量的，`908eb69` 是文档校形那条） |
+| `port:` 链 / 补丁总数 | 24 / **86**（不变） |
+| 补丁状态（CLI） | **78 applied / 0 pending / 6 na / 1 skipped / 1 missing_file**，`drifted=0`（不变） |
+| 宿主 / `resources\app` | `0.2.2-rc.1` / **22,167 文件**（不变） |
+| 安装形态 | Junction → `$SRC`；依赖 `link:`；`allowBuilds` 2 行（不变） |
+| 副本文件数 | 377（junction 下等于源码文件数，随源码新增而涨，不是漂移） |
+| 上游 | 两地址仍 `exit 128`（`Repository not found`） |
+
+**结论**：与 11-12 快照一致，无偏差；上游仍死，无新提交。无需任何动作。
+
 ### 2026-11-12 09:50（宿主已升 0.2.2-rc.1，安装形态改为 junction）
 
 > 这一版与上一条（11-10 10:44，rc.2 阶段）差异很大 —— 宿主换代 + 安装形态换了。
